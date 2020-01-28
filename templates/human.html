@@ -1,0 +1,104 @@
+ <html>
+     <head>
+         <title>Human | Configuration</title>
+         <link rel="shortcut icon" type="image/png" href="/gui/img/favicon.png"/>
+         <link rel="stylesheet" href="/gui/css/shared.css">
+         <link rel="stylesheet" href="/gui/css/navbar.css">
+         <link rel="stylesheet" href="/gui/css/basic.css">
+         <link rel="stylesheet" href="/gui/css/modal.css">
+         <link rel="stylesheet" href="/human/css/basic.css">
+     </head>
+     <body>
+     <div class="navbar">
+         <a href="/">Home</a>
+         <a href="/logout" style="float:right">Logout</a>
+     </div>
+     <center style="margin-bottom: 100px">
+
+         <div id="human-commands" class="row-canvas">
+            <div class="section-profile">
+                <div class="row">
+                    <div class="topright duk-icon"><img onclick="openLocalDuk()" src="/gui/img/duk.png"></div>
+
+                    <div class="column section-border" style="flex:25%;text-align:left;padding:15px;">
+                         <h1 style="font-size:70px;margin-top:-20px;">Human</h1>
+                         <h2 style="margin-top:-55px">emulate human behavior</h2>
+                         <p>
+                            This plugin provides a customizable binary to emulate human behavior on a system.
+                         </p>
+                         <br>
+
+                    </div>
+                    <div class="column" style="flex:75%;padding:15px;text-align: left">
+                        <div class="row row-interior">
+                            <div id="behavior-options" class="column column-interior">
+                                <select id="base-platform" style="width:60%;">
+                                    <option disabled="disabled" selected="">Select target OS</option>
+                                    <option value="darwin">MacOS</option>
+                                    <option value="linux">Linux</option>
+                                    <option value="windows-psh">Windows (PowerShell)</option>
+                                </select>
+                                <ul >
+                                    <li>
+                                        <input type="checkbox" name="human-browser" id="human-browser" value="0"/>
+                                        <span>Browse to Websites</span>
+                                    </li>
+                                    <li>
+                                        <input type="checkbox" name="human-files" id="human-files" value="1"/>
+                                        <span>Open Files with Default Applications</span>
+                                    </li>
+                                </ul>
+                                <button id="generateLayer" type="button" class="button-success" style="" onclick="generateHuman()">Generate Human</button>
+                            </div>
+                            <div class="column column-interior">
+                                <code id="delivery-commands" style="text-align: left; font-size:14px;"></code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+         <div id="duk-modal" class="modal">
+            <form class="modal-content">
+                <div class="container">
+                    <div class="row duk-modal">
+                        <span onclick="document.getElementById('duk-modal').style.display='none'" class="close" title="Close Modal">&times;</span>
+                        <div class="column" style="flex:8%">
+                            <img src="/gui/img/duk.png"/>
+                        </div>
+                        <div class="column" style="flex:92%">
+                            <p id="duk-text" style="color: white"></p>
+                        </div>
+                    </div>
+                </div>
+             </form>
+          </div>
+
+         </center>
+     </body>
+     <script src="/gui/jquery/jquery.js"></script>
+     <script src="/gui/js/shared.js"></script>
+     <script>
+         function displayDeliveryCommand() {
+
+         }
+
+         function generateHuman() {
+         	let baseHuman = "";
+
+         	switch ($("#base-platform").val()) {
+	            case "darwin":
+	            	baseHuman = 'human=$(curl -svkOJ -X POST -H \'file:emulator.go\' -H \'platform:darwin\' '+http+'/file/download 2>&1 | grep -i \'Content-Disposition\' | grep -io \'filename=.*\' | cut -d\'=\' -f2 | tr -d \'"\\r\') && chmod +x $human 2>/dev/null && ./$human';
+                    break;
+                case "linux":
+                	baseHuman = 'human=$(curl -svkOJ -X POST -H \'file:emulator.go\' -H \'platform:darwin\' '+http+'/file/download 2>&1 | grep -i \'Content-Disposition\' | grep -io \'filename=.*\' | cut -d\'=\' -f2 | tr -d \'"\\r\') && chmod +x $human 2>/dev/null && ./$human';
+	                break;
+                case "windows-psh":
+	                baseHuman = '$url="'+http+'/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("platform","windows"); $wc.Headers.add("file","emulator.go"); try {($data=$wc.DownloadData($url)) -and ($name=$wc.ResponseHeaders["Content-Disposition"].Substring($wc.ResponseHeaders["Content-Disposition"].IndexOf("filename=")+9).Replace("`"","")) -and ([io.file]::WriteAllBytes("C:\\Users\\Public\\$name.exe",$data)) | Out-Null; iex "C:\\Users\\Public\\$name.exe -tasks } catch{};';
+
+			}
+         }
+     </script>
+ </html>

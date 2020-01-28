@@ -1,0 +1,12 @@
+.row .row-interior {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+.column .column-interior {
+    background-color: var(--primary-background);
+    padding: 15px;
+    border-radius: 25px;
+    margin-bottom: 0;
+    margin-top: 0;
+}
