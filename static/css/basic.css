@@ -5,8 +5,45 @@
 }
 .column .column-interior {
     background-color: var(--primary-background);
-    padding: 15px;
+    padding: 25px;
     border-radius: 25px;
     margin-bottom: 0;
     margin-top: 0;
+}
+
+.human-box h4 {
+    font-size:20px;
+    margin-top: 50px;
+    text-align: left;
+}
+
+.human-box table{
+    width: 100%;
+}
+
+.human-box table p {
+    font-family: var(--default-font);
+    font-size: 14px;
+    font-weight: 700;
+}
+.human-box input[type='text'] {
+    width: 100%;
+    margin-top: 0;
+}
+.human-box select {
+    width: 100%;
+}
+
+.human-box ul {
+    padding-inline-start: 20px;
+}
+.human-box input[type='number'] {
+    position: relative;
+    width: 50px;
+    padding: 0;
+    margin: 0;
+}
+
+.human-box input[type='range'] ::before {
+    display:none;
 }

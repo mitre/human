@@ -31,26 +31,60 @@
                     </div>
                     <div class="column" style="flex:75%;padding:15px;text-align: left">
                         <div class="row row-interior">
-                            <div id="behavior-options" class="column column-interior">
-                                <select id="base-platform" style="width:60%;">
-                                    <option disabled="disabled" selected="">Select target OS</option>
-                                    <option value="darwin">MacOS</option>
-                                    <option value="linux">Linux</option>
-                                    <option value="windows-psh">Windows (PowerShell)</option>
-                                </select>
-                                <ul >
+                            <div id="behavior-options" class="column column-interior human-box">
+                                <table>
+                                    <tr>
+                                        <td><p>Name:</p></td>
+                                        <td><input id="human-name" type="text" placeholder="Enter human's name..."></td>
+                                    </tr>
+                                    <tr>
+                                        <td><p>Platform:</p></td>
+                                        <td>
+                                            <select id="base-platform">
+                                                <option disabled="disabled" selected="">Select target OS</option>
+                                                <option value="darwin">MacOS</option>
+                                                <option value="linux">Linux</option>
+                                                <option value="windows-psh">Windows (PowerShell)</option>
+                                            </select>
+                                        </td>
+                                    </tr>
+                                </table>
+                                <h4>Select your human's behaviors:</h4>
+                                <ul id="human-tasks">
+                                    {% for m in modules %}
                                     <li>
-                                        <input type="checkbox" name="human-browser" id="human-browser" value="0"/>
-                                        <span>Browse to Websites</span>
+                                        <input type="checkbox" name="human-{{m.name}}" id="human-{{m.name}}"/>
+                                        <span>{{ m.description }}</span>
                                     </li>
+                                    {% endfor %}
+                                </ul>
+
+                                <h4>Human behavior configuration:</h4>
+                                <table>
+                                    <tr>
+                                        <td><p>Task Sleep Interval</p></td>
+                                        <td><input class="queueOption" type="range" min="5" max="50" class="slider" id="human-task-interval" name="human-task-interval" onchange="updateNumberField(this);"/></td>
+                                        <td><input type="number" id="human-task-interval-text" onchange="updateSlider(this);"></td>
+                                    </tr>
+                                    <tr>
+                                        <td><p>Task Cluster sSleep Interval</p></td>
+                                        <td><input class="queueOption" type="range" min="5" max="1000" class="slider" id="human-cluster-interval" name="human-cluster-interval" onchange="updateNumberField(this);"/></td>
+                                        <td><input type="number" id="human-cluster-interval-text" onchange="updateSlider(this);"></td>
+                                    </tr>
+                                    <tr>
+                                        <td><p>Tasks per Cluster</p></td>
+                                        <td><input class="queueOption" type="range" min="1" max="20" class="slider" id="human-task-count" name="human-task-count" onchange="updateNumberField(this);"/></td>
+                                        <td><input type="number" id="human-task-count-text" onchange="updateSlider(this);"></td>
+                                    </tr>
+                                </table>
+                                <ul>
                                     <li>
-                                        <input type="checkbox" name="human-files" id="human-files" value="1"/>
-                                        <span>Open Files with Default Applications</span>
+
                                     </li>
                                 </ul>
-                                <button id="generateLayer" type="button" class="button-success" style="" onclick="generateHuman()">Generate Human</button>
+                                <button id="generateLayer" type="button" class="button-success" style="" onclick="generateHuman();">Generate Human</button>
                             </div>
-                            <div class="column column-interior">
+                            <div class="column column-interior" style="text-align: left;">
                                 <code id="delivery-commands" style="text-align: left; font-size:14px;"></code>
                             </div>
                         </div>
@@ -81,24 +115,59 @@
      <script src="/gui/jquery/jquery.js"></script>
      <script src="/gui/js/shared.js"></script>
      <script>
-         function displayDeliveryCommand() {
-
-         }
-
-         function generateHuman() {
-         	let baseHuman = "";
-
-         	switch ($("#base-platform").val()) {
-	            case "darwin":
-	            	baseHuman = 'human=$(curl -svkOJ -X POST -H \'file:emulator.go\' -H \'platform:darwin\' '+http+'/file/download 2>&1 | grep -i \'Content-Disposition\' | grep -io \'filename=.*\' | cut -d\'=\' -f2 | tr -d \'"\\r\') && chmod +x $human 2>/dev/null && ./$human';
+         window.onload = function () {
+         	['human-task-interval', 'human-cluster-interval', 'human-task-count'].forEach(elem => defaultNumberField(elem));
+		 };
+         function defaultNumberField(elem) {
+        	document.getElementById(elem+'-text').value = document.getElementById(elem).value;
+        }
+        function updateNumberField(elem){
+            document.getElementById(elem.name+'-text').value=elem.value;
+        }
+        function updateSlider(elem) {
+	        let slider = elem.id.replace('-text', '');
+	        document.getElementById(slider).value = elem.value;
+		}
+        function generateHuman() {
+            let baseHuman = "";
+            let cmdBlock = $("#delivery-commands");
+            let http = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port: '');
+            cmdBlock.empty();
+            let humanName = $('#human-name').val();
+            if (humanName === '') {
+            	alert('Enter a human name');
+            	return;
+            }
+            let platform = $("#base-platform").val();
+            if (platform === null) {
+            	alert('Select a platform!');
+            	return;
+            }
+            let taskClusterInterval = $('#human-cluster-interval').val();
+            let taskInterval = $('#human-task-interval').val();
+            let taskCount = $('#human-task-count').val();
+            let taskList = [];
+            $('#human-tasks').find('li > input').each(function (e) {
+            	if ($(this).is(':checked')){
+            	    taskList.push($(this).attr('name').replace('human-', ''));
+                }
+			});
+            if (taskList.length === 0) {
+            	alert('Select tasks for your human to execute!');
+            	return
+            }
+            switch (platform) {
+                case "darwin":
+                    baseHuman = 'human=$(curl -svkOJ -X POST -H \'file:human.darwin\' -H \'name:'+humanName+'\' -H \'platform:darwin\' '+http+'/file/download 2>&1 | grep -i \'Content-Disposition\' | grep -io \'filename=.*\' | cut -d\'=\' -f2 | tr -d \'"\\r\') && chmod +x $human 2>/dev/null && ./$human --clustersize '+taskCount+' --taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' '+taskList.join(" ");
                     break;
                 case "linux":
-                	baseHuman = 'human=$(curl -svkOJ -X POST -H \'file:emulator.go\' -H \'platform:darwin\' '+http+'/file/download 2>&1 | grep -i \'Content-Disposition\' | grep -io \'filename=.*\' | cut -d\'=\' -f2 | tr -d \'"\\r\') && chmod +x $human 2>/dev/null && ./$human';
-	                break;
-                case "windows-psh":
-	                baseHuman = '$url="'+http+'/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("platform","windows"); $wc.Headers.add("file","emulator.go"); try {($data=$wc.DownloadData($url)) -and ($name=$wc.ResponseHeaders["Content-Disposition"].Substring($wc.ResponseHeaders["Content-Disposition"].IndexOf("filename=")+9).Replace("`"","")) -and ([io.file]::WriteAllBytes("C:\\Users\\Public\\$name.exe",$data)) | Out-Null; iex "C:\\Users\\Public\\$name.exe -tasks } catch{};';
 
-			}
-         }
+                    break;
+                case "windows-psh":
+                    baseHuman = '$url="'+http+'/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("platform","windows"); $wc.Headers.add("file","emulator.go"); try {($data=$wc.DownloadData($url)) -and ($name=$wc.ResponseHeaders["Content-Disposition"].Substring($wc.ResponseHeaders["Content-Disposition"].IndexOf("filename=")+9).Replace("`"","")) -and ([io.file]::WriteAllBytes("C:\\Users\\Public\\$name.exe",$data)) | Out-Null; iex "C:\\Users\\Public\\$name.exe -tasks } catch{};';
+
+            }
+            cmdBlock.append(baseHuman);
+        }
      </script>
  </html>
