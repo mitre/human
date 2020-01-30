@@ -129,7 +129,7 @@
 	        document.getElementById(slider).value = elem.value;
 		}
         function generateHuman() {
-            let baseHuman = "";
+         	let baseHuman = "";
             let cmdBlock = $("#delivery-commands");
             let http = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port: '');
             cmdBlock.empty();
@@ -140,9 +140,9 @@
             }
             let platform = $("#base-platform").val();
             if (platform === null) {
-            	alert('Select a platform!');
-            	return;
-            }
+				alert('Select a platform!');
+				return;
+			}
             let taskClusterInterval = $('#human-cluster-interval').val();
             let taskInterval = $('#human-task-interval').val();
             let taskCount = $('#human-task-count').val();
@@ -158,16 +158,18 @@
             }
             switch (platform) {
                 case "darwin":
-                    baseHuman = 'human=$(curl -svkOJ -X POST -H \'file:human.darwin\' -H \'name:'+humanName+'\' -H \'platform:darwin\' '+http+'/file/download 2>&1 | grep -i \'Content-Disposition\' | grep -io \'filename=.*\' | cut -d\'=\' -f2 | tr -d \'"\\r\') && chmod +x $human 2>/dev/null && ./$human --clustersize '+taskCount+' --taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' '+taskList.join(" ");
+                    baseHuman = 'human=$(curl -svkOJ -X POST -H \'file:pyhuman\' -H \'name:'+humanName+'\' '+http+'/file/download 2>&1 | grep -i \'Content-Disposition\' | grep -io \'filename=.*\' | cut -d\'=\' -f2 | tr -d \'"\\r\') && tar -zxvf $human && ./$human --clustersize '+taskCount+' --taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' '+taskList.join(" ");
                     break;
-                case "linux":
-
-                    break;
-                case "windows-psh":
-                    baseHuman = '$url="'+http+'/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("platform","windows"); $wc.Headers.add("file","emulator.go"); try {($data=$wc.DownloadData($url)) -and ($name=$wc.ResponseHeaders["Content-Disposition"].Substring($wc.ResponseHeaders["Content-Disposition"].IndexOf("filename=")+9).Replace("`"","")) -and ([io.file]::WriteAllBytes("C:\\Users\\Public\\$name.exe",$data)) | Out-Null; iex "C:\\Users\\Public\\$name.exe -tasks } catch{};';
-
             }
+            let postData = {'index':'human', 'name':humanName, 'tasks':taskList};
+            restRequest('POST', postData, renderDownloadCommand, endpoint='/plugin/human/api');
             cmdBlock.append(baseHuman);
         }
+
+        function renderDownloadCommand(data) {
+            if (data) {
+            	alert(data);
+            }
+		}
      </script>
  </html>
