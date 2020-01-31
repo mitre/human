@@ -47,3 +47,9 @@
 .human-box input[type='range'] ::before {
     display:none;
 }
+
+.human-header-list {
+    list-style-position: inside;
+    text-align: center;
+    display: inline-block;
+}

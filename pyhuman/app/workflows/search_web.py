@@ -11,18 +11,18 @@ def load(driver):
 class SearchWeb(BaseWorkflow):
 
     def __init__(self, driver):
-        super().__init__(name='WebSearcher', description='Searches for something on google', driver=driver)
+        super().__init__(name='WebSearcher', description='Search for something on google', driver=driver)
 
     def action(self):
-        self._search_web("Test code")
+        self._search_web('Random string to search')
 
     """ PRIVATE """
 
     def _search_web(self, search_string):
         with self.driver as d:
-            d.get("https://www.google.com")
-            assert "Google" in d.title
-            elem = d.find_element_by_name("q")
+            d.get('https://www.google.com')
+            assert 'Google' in d.title
+            elem = d.find_element_by_name('q')
             elem.clear()
             sleep(2)
             elem.send_keys(search_string)

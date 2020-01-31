@@ -20,16 +20,13 @@ def emulation_loop(workflows, clustersize, taskinterval, taskgroupinterval):
         sleep(random.randrange(taskgroupinterval))
 
 
-def import_workflows(webdriver_helper, tasks):
+def import_workflows(webdriver_helper):
     extensions = []
     for root, dirs, files in os.walk(os.path.join('app', 'workflows')):
         files = [f for f in files if not f[0] == '.' and not f[0] == "_"]
         dirs[:] = [d for d in dirs if not d[0] == '.' and not d[0] == "_"]
         for file in files:
-            module = load_module(root, file, webdriver_helper)
-            for t in tasks:
-                if module.name == t:
-                    extensions.append(module)
+            extensions.append(load_module(root, file, webdriver_helper))
     return extensions
 
 
@@ -41,11 +38,11 @@ def load_module(root, file, webdriver_helper):
         print('Error could not load workflow. {}'.format(e))
 
 
-def run(clustersize, taskinterval, taskgroupinterval, tasks):
+def run(clustersize, taskinterval, taskgroupinterval):
     random.seed()
     webdriver_helper = WebDriverHelper()
-    if webdriver_helper.browser != '' and len(tasks) > 0:
-        workflows = import_workflows(webdriver_helper=webdriver_helper, tasks=tasks)
+    if webdriver_helper.browser != '':
+        workflows = import_workflows(webdriver_helper=webdriver_helper)
         emulation_loop(workflows=workflows, clustersize=clustersize, taskinterval=taskinterval,
                        taskgroupinterval=taskgroupinterval)
 
@@ -55,7 +52,5 @@ if __name__ == '__main__':
     parser.add_argument('--clustersize', type=int, default=TASK_CLUSTER_COUNT)
     parser.add_argument('--taskinterval', type=int, default=TASK_INTERVAL_SECONDS)
     parser.add_argument('--taskgroupinterval', type=int, default=GROUPING_INTERVAL_SECONDS)
-    parser.add_argument('task', type=str, default='', nargs='+', help='tasks for human to execute (by name)')
     args = parser.parse_args()
-    run(clustersize=args.clustersize, taskinterval=args.taskinterval, taskgroupinterval=args.taskgroupinterval,
-        tasks=args.task)
+    run(clustersize=args.clustersize, taskinterval=args.taskinterval, taskgroupinterval=args.taskgroupinterval)

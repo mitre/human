@@ -2,7 +2,6 @@ import webbrowser
 from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.firefox import GeckoDriverManager
-from webdriver_manager.microsoft import IEDriverManager
 
 
 class WebDriverHelper:
@@ -17,11 +16,10 @@ class WebDriverHelper:
             self.driver = webdriver.Chrome(ChromeDriverManager().install())
         elif self.browser == 'firefox':
             self.driver = webdriver.Firefox(GeckoDriverManager().install())
-        elif self.browser == 'windows-default':
-            self.driver = webdriver.Ie(IEDriverManager().install())
         return self.driver
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        print('trying to exit')
         self.driver.quit()
 
     """ PRIVATE """
@@ -37,6 +35,6 @@ class WebDriverHelper:
             except webbrowser.Error:
                 try:
                     webbrowser.get(using='windows-default')
-                    self.browser = 'windows-default'
+                    self.browser = 'chrome'
                 except webbrowser.Error:
                     print('No compatible browsers available on the system')

@@ -14,17 +14,35 @@
          <a href="/logout" style="float:right">Logout</a>
      </div>
      <center style="margin-bottom: 100px">
-
+            <div id="human-info" class="row-canvas">
+            <div class="section-profile">
+                <div class="row">
+                    <div class="column" style="flex:100%;">
+                        <center>
+                            <h1 style="font-size: 60px;margin-top:30px;">Human plugin</h1>
+                            <hr><br/>
+                            <span style="display:block;">This plugin allows you to design a human that will emulate user behavior on an endpoint. Use the following steps to build and deploy your own human:</span>
+                            <ol class="human-header-list">
+                                <li>Install Python3</li>
+                                <li>Install Python3 Virtualenv</li>
+                                <li>Install Chrome</li>
+                                <li>Build a human below and run the download cradle from a shell (sh, powershell, etc)</li>
+                            </ol>
+                    </center>
+                    </div>
+                </div>
+            </div>
+        </div>
          <div id="human-commands" class="row-canvas">
             <div class="section-profile">
                 <div class="row">
                     <div class="topright duk-icon"><img onclick="openLocalDuk()" src="/gui/img/duk.png"></div>
 
                     <div class="column section-border" style="flex:25%;text-align:left;padding:15px;">
-                         <h1 style="font-size:70px;margin-top:-20px;">Human</h1>
+                         <h1 id="human-name-header" style="font-size:70px;margin-top:-20px;">Human</h1>
                          <h2 style="margin-top:-55px">emulate human behavior</h2>
                          <p>
-                            This plugin provides a customizable binary to emulate human behavior on a system.
+                            Design and generate your human, then deploy that human on a target system.
                          </p>
                          <br>
 
@@ -63,17 +81,17 @@
                                 <table>
                                     <tr>
                                         <td><p>Task Sleep Interval</p></td>
-                                        <td><input class="queueOption" type="range" min="5" max="50" class="slider" id="human-task-interval" name="human-task-interval" onchange="updateNumberField(this);"/></td>
+                                        <td><input class="queueOption" type="range" min="5" max="50" value="10" class="slider" id="human-task-interval" name="human-task-interval" onchange="updateNumberField(this);"/></td>
                                         <td><input type="number" id="human-task-interval-text" onchange="updateSlider(this);"></td>
                                     </tr>
                                     <tr>
-                                        <td><p>Task Cluster sSleep Interval</p></td>
-                                        <td><input class="queueOption" type="range" min="5" max="1000" class="slider" id="human-cluster-interval" name="human-cluster-interval" onchange="updateNumberField(this);"/></td>
+                                        <td><p>Task Cluster Sleep Interval</p></td>
+                                        <td><input class="queueOption" type="range" min="5" max="1000" value="500" class="slider" id="human-cluster-interval" name="human-cluster-interval" onchange="updateNumberField(this);"/></td>
                                         <td><input type="number" id="human-cluster-interval-text" onchange="updateSlider(this);"></td>
                                     </tr>
                                     <tr>
                                         <td><p>Tasks per Cluster</p></td>
-                                        <td><input class="queueOption" type="range" min="1" max="20" class="slider" id="human-task-count" name="human-task-count" onchange="updateNumberField(this);"/></td>
+                                        <td><input class="queueOption" type="range" min="1" max="20" value="5" class="slider" id="human-task-count" name="human-task-count" onchange="updateNumberField(this);"/></td>
                                         <td><input type="number" id="human-task-count-text" onchange="updateSlider(this);"></td>
                                     </tr>
                                 </table>
@@ -129,9 +147,7 @@
 	        document.getElementById(slider).value = elem.value;
 		}
         function generateHuman() {
-         	let baseHuman = "";
             let cmdBlock = $("#delivery-commands");
-            let http = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port: '');
             cmdBlock.empty();
             let humanName = $('#human-name').val();
             if (humanName === '') {
@@ -143,9 +159,6 @@
 				alert('Select a platform!');
 				return;
 			}
-            let taskClusterInterval = $('#human-cluster-interval').val();
-            let taskInterval = $('#human-task-interval').val();
-            let taskCount = $('#human-task-count').val();
             let taskList = [];
             $('#human-tasks').find('li > input').each(function (e) {
             	if ($(this).is(':checked')){
@@ -156,20 +169,51 @@
             	alert('Select tasks for your human to execute!');
             	return
             }
-            switch (platform) {
-                case "darwin":
-                    baseHuman = 'human=$(curl -svkOJ -X POST -H \'file:pyhuman\' -H \'name:'+humanName+'\' '+http+'/file/download 2>&1 | grep -i \'Content-Disposition\' | grep -io \'filename=.*\' | cut -d\'=\' -f2 | tr -d \'"\\r\') && tar -zxvf $human && ./$human --clustersize '+taskCount+' --taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' '+taskList.join(" ");
-                    break;
-            }
-            let postData = {'index':'human', 'name':humanName, 'tasks':taskList};
+            let postData = {'index':'human', 'platform':platform, 'name':humanName, 'tasks':taskList};
             restRequest('POST', postData, renderDownloadCommand, endpoint='/plugin/human/api');
-            cmdBlock.append(baseHuman);
         }
 
         function renderDownloadCommand(data) {
-            if (data) {
-            	alert(data);
+            let cmdBlock = $("#delivery-commands");
+         	if (data) {
+         		let http = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port: '');
+         		let taskClusterInterval = $('#human-cluster-interval').val();
+                let taskInterval = $('#human-task-interval').val();
+                let taskCount = $('#human-task-count').val();
+                let humanName = $('#human-name').val();
+                let platform = $("#base-platform").val();
+                let baseHuman = "";
+                $('#human-name-header').text(humanName);
+                switch (platform) {
+                    case "darwin":
+                        baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
+                            '&& cd '+humanName+' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r requirements.txt && '+humanName+'/bin/python human.py --clustersize '+taskCount+' ' +
+                            '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval;
+                        break;
+                    case "linux":
+                        baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
+                            '&& cd '+humanName+' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r requirements.txt && '+humanName+'/bin/python human.py --clustersize '+taskCount+' ' +
+                            '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval;
+                        break;
+                    case "windows-psh":
+                        baseHuman = '$server="'+http+'"; $url="$server/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("file","'+humanName+'.zip"); $data=$wc.DownloadData($url); ' +
+                            '[io.file]::WriteAllBytes(".\\'+humanName+'.zip", $data); Expand-Archive '+humanName+'.zip -DestinationPath '+humanName+' -Force; cd '+humanName+'; python.exe -m venv '+humanName+';' +
+                            '.\\'+humanName+'\\Scripts\\pip.exe install -r requirements.txt; .\\'+humanName+'\\Scripts\\python.exe human.py --clustersize '+taskCount+' ' +
+                            '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+';';
+                        break;
+                }
+                cmdBlock.append(baseHuman);
+            } else {
+         		cmdBlock.append('Could not render human download command');
             }
 		}
+
+		function openLocalDuk() {
+             document.getElementById("duk-modal").style.display="block";
+            $('#duk-text').html('Did you know... your human behavior configuration will impact how the application behaves on the endpoint.' +
+                '<ul><li>Task Sleep Interval         - Maximum sleep time between individual tasks executing</li>' +
+                '<li>Task Cluster Sleep Interval - Maximum sleep time between clusters of tasks executing</li>' +
+                '<li>Tasks per Cluster           - Maximum number of tasks to execute per cluster</li></ul>');
+         }
      </script>
  </html>
