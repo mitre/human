@@ -1,4 +1,5 @@
 import inspect
+import json
 import os
 import sys
 from aiohttp import web
@@ -10,9 +11,8 @@ from app.utility.base_service import BaseService
 class HumanService(BaseService):
 
     def __init__(self, services):
-        self.services = services
         self.file_svc = services.get('file_svc')
-        self.log = self.create_logger('human_svc')
+        self.log = self.add_service('human_svc', self)
         self.human_dir = os.path.relpath(os.path.join('plugins', 'human'))
         self.pyhuman_path = os.path.abspath(os.path.join(self.human_dir, 'pyhuman'))
         sys.path.insert(0, self.pyhuman_path)
@@ -21,9 +21,10 @@ class HumanService(BaseService):
     async def build_human(self, data):
         try:
             await self._select_modules_and_compress(modules=data.pop('tasks'), name=data.pop('name'), platform=data.pop('platform'))
-            return web.Response(status=200, body='Human successfully built')
+            return json.dumps('Human successfully built')
         except Exception as e:
-            return web.Response(status=500)
+            self.log.error('Error building human. %s' % e)
+            return json.dumps('Could not build human.')
 
     """ PRIVATE """
 
@@ -52,7 +53,8 @@ class HumanService(BaseService):
         self.log.debug('Compressing new human: %s' % name)
         os.system(chdir + compress)
 
-    async def _get_compression_params(self, platform):
+    @staticmethod
+    async def _get_compression_params(platform):
         if platform == 'windows-psh':
             return 'zip', '-qq', 'zip'
         return 'tar', 'zcf', 'tar.gz'

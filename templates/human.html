@@ -9,10 +9,7 @@
          <link rel="stylesheet" href="/human/css/basic.css">
      </head>
      <body>
-     <div class="navbar">
-         <a href="/">Home</a>
-         <a href="/logout" style="float:right">Logout</a>
-     </div>
+    <div class="navbar plugin"></div>
      <center style="margin-bottom: 100px">
             <div id="human-info" class="row-canvas">
             <div class="section-profile">
@@ -95,11 +92,6 @@
                                         <td><input type="number" id="human-task-count-text" onchange="updateSlider(this);"></td>
                                     </tr>
                                 </table>
-                                <ul>
-                                    <li>
-
-                                    </li>
-                                </ul>
                                 <button id="generateLayer" type="button" class="button-success" style="" onclick="generateHuman();">Generate Human</button>
                             </div>
                             <div class="column column-interior" style="text-align: left;">

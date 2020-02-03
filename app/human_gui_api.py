@@ -15,6 +15,7 @@ class HumanApi:
         return dict(modules=self.human_svc.modules)
 
     async def rest_api(self, request):
+        await self.auth_svc.check_permissions(request)
         try:
             data = dict(await request.json())
             index = data.pop('index')
@@ -24,5 +25,5 @@ class HumanApi:
                 )
             )
             return await options[request.method][index](data)
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
