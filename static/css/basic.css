@@ -53,3 +53,18 @@
     text-align: center;
     display: inline-block;
 }
+.install-container {
+    position: relative;
+}
+.install-container .background-text {
+    position: absolute;
+    color: #f1f1f1;
+    font-size: 40px;
+    bottom: 10px;
+    opacity: 30%;
+}
+
+.install-container span {
+    font-size: 14px;
+    line-height: 22px;
+}

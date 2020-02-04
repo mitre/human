@@ -1,5 +1,5 @@
 .idea/
 __pycache__
-.DSStore
+.DS_Store
 payloads/*.tar.gz
 payloads/*.zip
