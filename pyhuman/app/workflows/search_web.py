@@ -14,7 +14,7 @@ class SearchWeb(BaseWorkflow):
         super().__init__(name='WebSearcher', description='Search for something on google', driver=driver)
 
     def action(self):
-        self._search_web('Random string to search')
+        self._search_web('MITRE Caldera')
 
     """ PRIVATE """
 
