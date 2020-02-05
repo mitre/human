@@ -1,4 +1,3 @@
-import json
 import os
 import sys
 from importlib import import_module
@@ -61,7 +60,6 @@ class HumanService(BaseService):
         os.system(chdir + compress)
         await self.data_svc.store(Human(name=name, task_interval=task_interval, task_cluster_interval=task_cluster_interval,
                                         tasks_per_cluster=tasks_per_cluster, platform=platform, workflows=workflows))
-
 
     @staticmethod
     async def _get_compression_params(platform):
