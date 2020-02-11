@@ -195,8 +195,8 @@
                     '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval;
                 break;
             case "windows-psh":
-                baseHuman = '$server="'+http+'"; $url="$server/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("file","'+humanName+'.zip"); $data=$wc.DownloadData($url); ' +
-                    '[io.file]::WriteAllBytes(".\\'+humanName+'.zip", $data); Expand-Archive '+humanName+'.zip -DestinationPath '+humanName+' -Force; cd '+humanName+'; python.exe -m venv '+humanName+';' +
+                baseHuman = '$server="'+http+'"; $url="$server/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("file","'+humanName+'.zip"); $wc.DownloadFile($url, "$pwd\\'+humanName+'.zip"); ' +
+                    'Expand-Archive '+humanName+'.zip -DestinationPath '+humanName+' -Force; cd '+humanName+'; python.exe -m venv '+humanName+';' +
                     '.\\'+humanName+'\\Scripts\\pip.exe install -r requirements.txt; .\\'+humanName+'\\Scripts\\python.exe human.py --clustersize '+taskCount+' ' +
                     '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+';';
                 break;

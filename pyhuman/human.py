@@ -16,7 +16,9 @@ def emulation_loop(workflows, clustersize, taskinterval, taskgroupinterval):
     while True:
         for c in range(clustersize):
             sleep(random.randrange(taskinterval))
-            workflows[random.randrange(len(workflows))].action()
+            index = random.randrange(len(workflows))
+            print(workflows[index].display)
+            workflows[index].action()
         sleep(random.randrange(taskgroupinterval))
 
 
@@ -41,7 +43,7 @@ def load_module(root, file, webdriver_helper):
 def run(clustersize, taskinterval, taskgroupinterval):
     random.seed()
     webdriver_helper = WebDriverHelper()
-    if webdriver_helper.browser != '':
+    if webdriver_helper.check_valid_driver_connection():
         workflows = import_workflows(webdriver_helper=webdriver_helper)
         emulation_loop(workflows=workflows, clustersize=clustersize, taskinterval=taskinterval,
                        taskgroupinterval=taskgroupinterval)
