@@ -36,7 +36,7 @@
 <div id="human-section-2" class="section-profile">
     <div class="row">
         <div class="topleft duk-icon"><img onclick="removeSection('human-section-2')" src="/gui/img/x.png"></div>
-
+        <div class="topright duk-icon"><img onclick="openLocalDuk()" src="/gui/img/duk.png"></div>
         <div class="column section-border" style="flex:25%;text-align:left;padding:15px;">
              <h1 id="human-name-header" style="font-size:70px;margin-top:-20px;">Name...</h1>
                 <h2 style="margin-top:-55px">build your human</h2>
@@ -81,7 +81,7 @@
                         <tr>
                             <td><p>Task Sleep Interval</p></td>
                             <td><input class="queueOption" type="range" min="5" max="50" value="10" class="slider" id="human-task-interval" name="human-task-interval" onchange="updateNumberField(this);"/></td>
-                            <td><input type="number" id="human-task-interval-text" onchange="updateSlider(this);"></td>
+                            <td><input type="number" id="human-task-interval-text" onchange="updateSlider(this);" onload="defaultNumberField(this);"></td>
                         </tr>
                         <tr>
                             <td><p>Task Cluster Sleep Interval</p></td>
@@ -113,7 +113,25 @@
         </div>
     </div>
 </div>
+<div id="duk-modal" class="modal">
+    <form class="modal-content">
+        <div class="container">
+            <div class="row duk-modal">
+                <span onclick="document.getElementById('duk-modal').style.display='none'" class="close" title="Close Modal">&times;</span>
+                <div class="column" style="flex:8%">
+                    <img src="/gui/img/duk.png"/>
+                </div>
+                <div class="column" style="flex:92%">
+                    <p id="duk-text" style="color: white"></p>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
 <script>
+    $( document ).ready(function () {
+        ['human-task-interval', 'human-cluster-interval', 'human-task-count'].forEach(elem => defaultNumberField(elem));
+     });
     function defaultNumberField(elem) {
         document.getElementById(elem+'-text').value = document.getElementById(elem).value;
     }
