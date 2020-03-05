@@ -1,5 +1,4 @@
 import os
-import sys
 from importlib import import_module
 
 from app.utility.base_service import BaseService
@@ -14,8 +13,7 @@ class HumanService(BaseService):
         self.data_svc = services.get('data_svc')
         self.log = self.add_service('human_svc', self)
         self.human_dir = os.path.relpath(os.path.join('plugins', 'human'))
-        self.pyhuman_path = os.path.abspath(os.path.join(self.human_dir, 'pyhuman'))
-        sys.path.insert(0, self.pyhuman_path)
+        self.pyhuman_path = os.path.abspath(os.path.join(self.human_dir, 'pyhuman', 'pyhuman'))
 
     async def build_human(self, data):
         try:
@@ -28,12 +26,9 @@ class HumanService(BaseService):
             self.log.error('Error building human. %s' % e)
 
     async def load_humans(self, data):
-        name = data.pop('name')
-        if name:
-            return (await self.data_svc.locate('humans', match=dict(name=name)))[0].display
-        return [h.display for h in await self.data_svc.locate('humans')]
+        return [h.display for h in await self.data_svc.locate('humans', match=dict(name=data.get('name')))]
 
-    async def find_available_workflows(self):
+    async def load_available_workflows(self):
         for root, dirs, files in os.walk(os.path.join(self.human_dir, 'pyhuman', 'app', 'workflows')):
             files = [f for f in files if not f[0] == '.' and not f[0] == '_']
             dirs[:] = [d for d in dirs if not d[0] == '.' and not d[0] == '_']

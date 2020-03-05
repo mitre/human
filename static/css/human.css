@@ -2,6 +2,8 @@
     margin: 0;
     padding: 0;
     height: 100%;
+    border: none;
+    background: none;
 }
 .column .column-interior {
     background-color: var(--primary-background);
@@ -13,8 +15,12 @@
 
 .human-box h4 {
     font-size:20px;
-    margin-top: 50px;
     text-align: left;
+}
+
+.human-box hr {
+    margin: 30px 0;
+    opacity: 25%;
 }
 
 .human-box table{
@@ -67,4 +73,8 @@
 .install-container span {
     font-size: 14px;
     line-height: 22px;
+}
+
+.duk-table-icon img {
+    margin: 0;
 }

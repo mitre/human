@@ -1,4 +1,4 @@
-<link rel="stylesheet" href="/human/css/basic.css">
+<link rel="stylesheet" href="/human/css/human.css">
 
 <div id="human-section-1" class="section-profile">
     <div class="row">
@@ -11,7 +11,7 @@
              </p>
              <br/>
         </div>
-        <div class="column" style="flex:75%;">
+        <div class="column" style="flex:75%;margin-right: -25px;">
             <div class="row row-interior install-list">
                 <div class="column column-interior install-container" style="text-align: left; flex:25%;">
                     <div class="background-text">1</div>
@@ -36,7 +36,7 @@
 <div id="human-section-2" class="section-profile">
     <div class="row">
         <div class="topleft duk-icon"><img onclick="removeSection('human-section-2')" src="/gui/img/x.png"></div>
-        <div class="topright duk-icon"><img onclick="openLocalDuk()" src="/gui/img/duk.png"></div>
+        <div class="topright duk-icon"></div>
         <div class="column section-border" style="flex:25%;text-align:left;padding:15px;">
              <h1 id="human-name-header" style="font-size:70px;margin-top:-20px;">Name...</h1>
                 <h2 style="margin-top:-55px">build your human</h2>
@@ -46,7 +46,7 @@
              <br>
 
         </div>
-        <div class="column" style="flex:75%;padding:15px;text-align: left">
+        <div class="column" style="flex:75%;text-align: left;margin-right: -25px;">
             <div class="row row-interior">
                 <div id="behavior-options" class="column column-interior human-box">
                     <table>
@@ -66,6 +66,7 @@
                             </td>
                         </tr>
                     </table>
+                    <hr>
                     <h4>Select your human's behaviors:</h4>
                     <ul id="human-tasks">
                         {% for w in workflows %}
@@ -75,21 +76,24 @@
                         </li>
                         {% endfor %}
                     </ul>
-
+                    <hr>
                     <h4>Human behavior configuration:</h4>
                     <table>
                         <tr>
                             <td><p>Task Sleep Interval</p></td>
+                            <td class="duk-icon duk-table-icon"><img id="duk-task-sleep-interval" src="/gui/img/duk.png"></td>
                             <td><input class="queueOption" type="range" min="5" max="50" value="10" class="slider" id="human-task-interval" name="human-task-interval" onchange="updateNumberField(this);"/></td>
                             <td><input type="number" id="human-task-interval-text" onchange="updateSlider(this);" onload="defaultNumberField(this);"></td>
                         </tr>
                         <tr>
                             <td><p>Task Cluster Sleep Interval</p></td>
+                            <td class="duk-icon duk-table-icon"><img id="duk-cluster-sleep-interval" src="/gui/img/duk.png"></td>
                             <td><input class="queueOption" type="range" min="5" max="1000" value="500" class="slider" id="human-cluster-interval" name="human-cluster-interval" onchange="updateNumberField(this);"/></td>
                             <td><input type="number" id="human-cluster-interval-text" onchange="updateSlider(this);"></td>
                         </tr>
                         <tr>
                             <td><p>Tasks per Cluster</p></td>
+                            <td class="duk-icon duk-table-icon"><img id="duk-task-per-cluster" src="/gui/img/duk.png"></td>
                             <td><input class="queueOption" type="range" min="1" max="20" value="5" class="slider" id="human-task-count" name="human-task-count" onchange="updateNumberField(this);"/></td>
                             <td><input type="number" id="human-task-count-text" onchange="updateSlider(this);"></td>
                         </tr>
@@ -113,21 +117,6 @@
         </div>
     </div>
 </div>
-<div id="duk-modal" class="modal">
-    <form class="modal-content">
-        <div class="container">
-            <div class="row duk-modal">
-                <span onclick="document.getElementById('duk-modal').style.display='none'" class="close" title="Close Modal">&times;</span>
-                <div class="column" style="flex:8%">
-                    <img src="/gui/img/duk.png"/>
-                </div>
-                <div class="column" style="flex:92%">
-                    <p id="duk-text" style="color: white"></p>
-                </div>
-            </div>
-        </div>
-    </form>
-</div>
 <script>
     $( document ).ready(function () {
         ['human-task-interval', 'human-cluster-interval', 'human-task-count'].forEach(elem => defaultNumberField(elem));
@@ -147,12 +136,12 @@
         cmdBlock.empty();
         let humanName = $('#human-name').val();
         if (humanName === '') {
-            alert('Enter a human name');
+            warn('Enter a human name');
             return;
         }
         let platform = $("#base-platform").val();
         if (platform === null) {
-            alert('Select a platform!');
+            warn('Select a platform!');
             return;
         }
         let taskList = [];
@@ -162,7 +151,7 @@
             }
         });
         if (taskList.length === 0) {
-            alert('Select tasks for your human to execute!');
+            warn('Select tasks for your human to execute!');
             return
         }
         let postData = {
@@ -219,14 +208,21 @@
 
     function renderLoadedHumanCallback(data){
         if(data){
-            renderCommandBlock(data.task_cluster_interval, data.task_interval, data.tasks_per_cluster, data.name, data.platform);
+            renderCommandBlock(data[0].task_cluster_interval, data[0].task_interval, data[0].tasks_per_cluster, data[0].name, data[0].platform);
         }
     }
-    function openLocalDuk() {
-         document.getElementById("duk-modal").style.display="block";
-        $('#duk-text').html('Did you know... your human behavior configuration will impact how the application behaves on the endpoint.' +
-            '<ul><li>Task Sleep Interval         - Maximum sleep time between individual tasks executing</li>' +
-            '<li>Task Cluster Sleep Interval - Maximum sleep time between clusters of tasks executing</li>' +
-            '<li>Tasks per Cluster           - Maximum number of tasks to execute per cluster</li></ul>');
-     }
+
+     $('#duk-task-sleep-interval').click(function() {
+		 stream('Task Sleep Interval - Maximum sleep time between individual tasks executing')
+	 });
+     $('#duk-cluster-sleep-interval').click(function () {
+     	stream('Task Cluster Sleep Interval - Maximum sleep time between clusters of tasks executing')
+     });
+     $('#duk-task-per-cluster').click(function () {
+        stream('Tasks per Cluster - Maximum number of tasks to execute per cluster')
+	 });
+
+     $(document).ready(function () {
+     	stream('Design and generate a human to create noise on hosts')
+     });
 </script>
