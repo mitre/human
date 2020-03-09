@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 
 setup(
     name='pyhuman',
@@ -6,6 +6,6 @@ setup(
     author='MITRE',
     author_email='caldera@mitre.org',
     description='Package to emulate human behaviors on an endpoint',
-    packages=find_packages(),
+    packages=find_namespace_packages(),
     python_requires='>=3.6.1'
 )

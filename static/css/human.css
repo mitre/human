@@ -1,7 +1,6 @@
 .row .row-interior {
     margin: 0;
     padding: 0;
-    height: 100%;
     border: none;
     background: none;
 }
@@ -18,9 +17,12 @@
     text-align: left;
 }
 
+.human-basic hr {
+    opacity: .25;
+}
+
 .human-box hr {
     margin: 30px 0;
-    opacity: 25%;
 }
 
 .human-box table{

@@ -17,4 +17,4 @@ async def enable(services):
     app.router.add_route('GET', '/plugin/human/gui', human_api.splash)
     app.router.add_route('*', '/plugin/human/api', human_api.rest_api)
     app.router.add_static('/human', 'plugins/human/static', append_version=True)
-    await human_svc.load_available_workflows()
+    await human_svc.install_pyhuman()
