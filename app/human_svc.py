@@ -1,7 +1,7 @@
 import os
-import subprocess
-import importlib
-import pyhuman
+import sys
+
+from importlib import import_module
 
 from app.utility.base_service import BaseService
 from plugins.human.app.c_human import Human
@@ -15,7 +15,8 @@ class HumanService(BaseService):
         self.data_svc = services.get('data_svc')
         self.log = self.add_service('human_svc', self)
         self.human_dir = os.path.relpath(os.path.join('plugins', 'human'))
-        self.pyhuman_path = os.path.join(self.human_dir, 'pyhuman', 'pyhuman')
+        self.pyhuman_path = os.path.join(self.human_dir, 'pyhuman')
+        sys.path.insert(0, self.pyhuman_path)  # needed to load relative module paths in pyhuman for workflows
 
     async def build_human(self, data):
         try:
@@ -30,28 +31,19 @@ class HumanService(BaseService):
     async def load_humans(self, data):
         return [h.display for h in await self.data_svc.locate('humans', match=dict(name=data.get('name')))]
 
-    async def install_pyhuman(self):
-        try:
-            installed = subprocess.run(['pip', 'install', 'pyhuman'], check=True, capture_output=True)
-            self.log.debug('Installed pyhuman: %s' % installed.stdout.decode())
-            await self._load_available_workflows()
-        except Exception as e:
-            self.log.error('Error installing human: %s' % e)
+    async def load_available_workflows(self):
+        for root, _, files in os.walk(os.path.join(self.pyhuman_path, 'app', 'workflows')):
+            files = [f for f in files if not f[0] == '.' and not f[0] == '_']
+            for file in files:
+                await self._load_workflow_module(root, file)
 
     """ PRIVATE """
 
-    async def _load_available_workflows(self):
-        module_dir = os.path.join('app', 'workflows')
-        for _, _, files in os.walk(os.path.join(self.pyhuman_path, module_dir)):
-            files = [f for f in files if not f[0] == '.' and not f[0] == '_']
-            for file in files:
-                await self._load_workflow_module(module_dir, file)
-
-    async def _load_workflow_module(self, module_root, file):
-        module = os.path.join(self.pyhuman_path, module_root, file.split('.')[0]).replace(os.path.sep, '.')
+    async def _load_workflow_module(self, module_root, workflow_file):
+        module = os.path.join(module_root, workflow_file.split('.')[0]).replace(os.path.sep, '.')
         try:
-            loaded = getattr(importlib.import_module('plugins.human.pyhuman.pyhuman.app.workflows.spawn_shell'), 'load')(driver=None)
-            await self.data_svc.store(Workflow(name=loaded.name, description=loaded.description, file=file))
+            loaded = getattr(import_module(module), 'load')(driver=None)
+            await self.data_svc.store(Workflow(name=loaded.name, description=loaded.description, file=workflow_file))
         except Exception as e:
             self.log.error('Error loading extension=%s, %s' % (module, e))
 
