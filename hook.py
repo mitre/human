@@ -1,5 +1,5 @@
 from app.utility.base_world import BaseWorld
-from plugins.human.app.human_gui_api import HumanApi
+from plugins.human.app.human_api import HumanApi
 from plugins.human.app.human_svc import HumanService
 
 name = 'Human'
@@ -13,8 +13,8 @@ async def enable(services):
     await services.get('data_svc').apply('humans')
     await services.get('data_svc').apply('workflows')
     human_svc = HumanService(services=services)
+    await human_svc.load_available_workflows()
     human_api = HumanApi(services=services, human_svc=human_svc)
     app.router.add_route('GET', '/plugin/human/gui', human_api.splash)
     app.router.add_route('*', '/plugin/human/api', human_api.rest_api)
     app.router.add_static('/human', 'plugins/human/static', append_version=True)
-    await human_svc.install_pyhuman()
