@@ -2,9 +2,10 @@ import traceback
 
 from aiohttp_jinja2 import template, web
 
-from app.service.auth_svc import check_authorization
+from app.service.auth_svc import for_all_public_methods, check_authorization
 
 
+@for_all_public_methods(check_authorization)
 class HumanApi:
 
     def __init__(self, services, human_svc):
@@ -13,12 +14,10 @@ class HumanApi:
         self.human_svc = human_svc
 
     @template('human.html')
-    @check_authorization
     async def splash(self, request):
         return dict(workflows=[w.display for w in await self.data_svc.locate('workflows')],
                     humans=[h.display for h in await self.data_svc.locate('humans')])
 
-    @check_authorization
     async def rest_api(self, request):
         try:
             data = dict(await request.json())
