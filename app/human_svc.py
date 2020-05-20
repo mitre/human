@@ -32,15 +32,15 @@ class HumanService(BaseService):
         return [h.display for h in await self.data_svc.locate('humans', match=dict(name=data.get('name')))]
 
     async def load_available_workflows(self):
-        for root, _, files in os.walk(os.path.join(self.pyhuman_path, 'app', 'workflows')):
-            files = [f for f in files if not f[0] == '.' and not f[0] == '_']
-            for file in files:
-                await self._load_workflow_module(root, file)
+        root = os.path.join(self.pyhuman_path, 'app', 'workflows')
+        for f in os.listdir(root):
+            if os.path.isfile(os.path.join(root, f)) and not f[0] == '_':
+                await self._load_workflow_module(root, f)
 
     """ PRIVATE """
 
-    async def _load_workflow_module(self, module_root, workflow_file):
-        module = os.path.join(module_root, workflow_file.split('.')[0]).replace(os.path.sep, '.')
+    async def _load_workflow_module(self, root, workflow_file):
+        module = os.path.join(root, workflow_file.split('.')[0]).replace(os.path.sep, '.')
         try:
             loaded = getattr(import_module(module), 'load')(driver=None)
             await self.data_svc.store(Workflow(name=loaded.name, description=loaded.description, file=workflow_file))
