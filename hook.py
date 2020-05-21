@@ -5,7 +5,7 @@ from plugins.human.app.human_svc import HumanService
 name = 'Human'
 description = 'Emulate human behavior on a system'
 address = '/plugin/human/gui'
-access = BaseWorld.Access.BLUE
+access = BaseWorld.Access.APP
 
 
 async def enable(services):
