@@ -14,7 +14,7 @@ class ListFiles(BaseWorkflow):
     def __init__(self, driver):
         super().__init__(name='ListFiles', description='List files in the current directory', driver=driver)
 
-    def action(self):
+    def action(self, extra=None):
         self._spawn_shell_and_quit()
 
     """ PRIVATE """
