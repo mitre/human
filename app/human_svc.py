@@ -23,7 +23,7 @@ class HumanService(BaseService):
             name = data.pop('name')
             await self._select_modules_and_compress(modules=data.pop('tasks'), name=name, platform=data.pop('platform'),
                                                     task_interval=data.pop('task_interval'), tasks_per_cluster=data.pop('task_count'),
-                                                    task_cluster_interval=data.pop('task_cluster_interval'))
+                                                    task_cluster_interval=data.pop('task_cluster_interval'), extra=data.pop('extra', []))
             return (await self.data_svc.locate('humans', match=dict(name=name)))[0].display
         except Exception as e:
             self.log.error('Error building human. %s' % e)
@@ -47,7 +47,7 @@ class HumanService(BaseService):
         except Exception as e:
             self.log.error('Error loading extension=%s, %s' % (module, e))
 
-    async def _select_modules_and_compress(self, modules, name, platform, task_interval, task_cluster_interval, tasks_per_cluster):
+    async def _select_modules_and_compress(self, modules, name, platform, task_interval, task_cluster_interval, tasks_per_cluster, extra):
         algo, args, ext = await self._get_compression_params(platform=platform)
         chdir = 'cd {} && '.format(self.pyhuman_path)
         compress = '{} {} {}.{} human.py data/* app/utility/* requirements.txt'.format(
@@ -56,7 +56,7 @@ class HumanService(BaseService):
         self.log.debug('Compressing new human: %s' % name)
         os.system(chdir + compress)
         await self.data_svc.store(Human(name=name, task_interval=task_interval, task_cluster_interval=task_cluster_interval,
-                                        tasks_per_cluster=tasks_per_cluster, platform=platform, workflows=workflows))
+                                        tasks_per_cluster=tasks_per_cluster, platform=platform, extra=extra, workflows=workflows))
 
     @staticmethod
     async def _get_compression_params(platform):

@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import random
 from importlib import import_module
@@ -10,7 +11,7 @@ from app.utility.webdriver_helper import WebDriverHelper
 TASK_CLUSTER_COUNT = 5
 TASK_INTERVAL_SECONDS = 10
 GROUPING_INTERVAL_SECONDS = 500
-EXTRA_DEFAULTS = ['w', 'pwd']
+EXTRA_DEFAULTS = []
 
 
 def emulation_loop(workflows, clustersize, taskinterval, taskgroupinterval, extra):
@@ -55,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--clustersize', type=int, default=TASK_CLUSTER_COUNT)
     parser.add_argument('--taskinterval', type=int, default=TASK_INTERVAL_SECONDS)
     parser.add_argument('--taskgroupinterval', type=int, default=GROUPING_INTERVAL_SECONDS)
-    parser.add_argument('--extra', default=EXTRA_DEFAULTS)
+    parser.add_argument('--extra', nargs='+', default=EXTRA_DEFAULTS)
     args = parser.parse_args()
     run(
         clustersize=args.clustersize,

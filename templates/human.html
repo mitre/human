@@ -188,12 +188,13 @@
             'task_cluster_interval': $('#human-cluster-interval').val(),
             'task_interval': $('#human-task-interval').val(),
             'task_count': $('#human-task-count').val(),
-            'tasks': taskList
+            'tasks': taskList,
+            'extra': ['ls ~/Downloads', 'pwd']
         };
         restRequest('POST', postData, renderBuiltHumanCallback, endpoint = '/plugin/human/api');
     }
 
-    function renderCommandBlock(taskClusterInterval, taskInterval, taskCount, humanName, platform){
+    function renderCommandBlock(taskClusterInterval, taskInterval, taskCount, extra, humanName, platform){
         let http = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port: '');
         let baseHuman = "";
         let cmdBlock = $("#delivery-commands");
@@ -203,18 +204,18 @@
             case "darwin":
                 baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
                     '&& cd '+humanName+' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r requirements.txt && '+humanName+'/bin/python human.py --clustersize '+taskCount+' ' +
-                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval;
+                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
             case "linux":
                 baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
                     '&& cd '+humanName+' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r requirements.txt && '+humanName+'/bin/python human.py --clustersize '+taskCount+' ' +
-                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval;
+                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
             case "windows-psh":
                 baseHuman = '$server="'+http+'"; $url="$server/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("file","'+humanName+'.zip"); $wc.DownloadFile($url, "$pwd\\'+humanName+'.zip"); ' +
                     'Expand-Archive '+humanName+'.zip -DestinationPath '+humanName+' -Force; cd '+humanName+'; python.exe -m venv '+humanName+';' +
                     '.\\'+humanName+'\\Scripts\\pip.exe install -r requirements.txt; .\\'+humanName+'\\Scripts\\python.exe human.py --clustersize '+taskCount+' ' +
-                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+';';
+                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
         }
         cmdBlock.append(baseHuman);
@@ -229,13 +230,13 @@
             let opts = $('#existing-humans');
             opts.append('<option id="human-'+data.name+'" value="human-'+data.name+'">'+data.name+'</option>');
             opts.find('option[value=human-'+data.name+']').attr('selected','selected');
-            renderCommandBlock(data.task_cluster_interval, data.task_interval, data.tasks_per_cluster, data.name, data.platform);
+            renderCommandBlock(data.task_cluster_interval, data.task_interval, data.tasks_per_cluster, data.extra, data.name, data.platform);
         }
     }
 
     function renderLoadedHumanCallback(data){
         if(data){
-            renderCommandBlock(data[0].task_cluster_interval, data[0].task_interval, data[0].tasks_per_cluster, data[0].name, data[0].platform);
+            renderCommandBlock(data[0].task_cluster_interval, data[0].task_interval, data[0].tasks_per_cluster, data.extra, data[0].name, data[0].platform);
         }
     }
 
