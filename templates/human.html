@@ -181,6 +181,10 @@
             warn('Select tasks for your human to execute!');
             return
         }
+        let commands = []
+        $('.command').each(function(){
+            commands.push($(this).val())
+        })
         let postData = {
             'index': 'build_human',
             'platform': platform,
@@ -189,7 +193,7 @@
             'task_interval': $('#human-task-interval').val(),
             'task_count': $('#human-task-count').val(),
             'tasks': taskList,
-            'extra': ['ls ~/Downloads', 'pwd']
+            'extra': commands
         };
         restRequest('POST', postData, renderBuiltHumanCallback, endpoint = '/plugin/human/api');
     }
