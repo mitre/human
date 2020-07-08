@@ -1,3 +1,14 @@
+:root {
+    --default-font: 'Veranda', sans-serif;
+    --theme-color: white;
+    --primary-background: black;
+    --secondary-background: #1e1e1e;
+    --section-background: #1e1e1e;
+    --font-color: white;
+    --invert-percentage: 100%;
+    --secondary-font-color: firebrick;
+}
+
 .row .row-interior {
     margin: 0;
     padding: 0;
@@ -79,4 +90,15 @@
 
 .duk-table-icon img {
     margin: 0;
+}
+
+#command-button {
+    display: inline-block;
+    background-color: var(--primary-background);
+    color: var(--font-color);
+    height: 25px;
+    width: 50%;
+    border: none;
+    margin: 5px;
+    cursor: pointer;
 }

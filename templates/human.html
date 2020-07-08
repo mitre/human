@@ -77,6 +77,14 @@
                         {% endfor %}
                     </ul>
                     <hr>
+                    <h4>Custom Commands:</h4>
+                        <button id="append-command" class="command-button"><b>+</b> Add Command</button>
+                        <button id="clear-commands" class="command-button"><b>-</b> Clear Commands</button>
+                        <br><br>
+                        <div id="input-command">
+                            <!-- Place holder for appended custom commands -->
+                        </div>
+                    <hr>
                     <h4>Human behavior configuration:</h4>
                     <table>
                         <tr>
@@ -131,6 +139,15 @@
      $('#duk-task-per-cluster').click(function () {
         stream('Tasks per Cluster - Maximum number of tasks to execute per cluster')
 	 });
+    $("#append-command").click(function () {
+        $('#input-command').append('<input type="text" class="command"><br class="command-break">');
+        stream('Input Custom Human Command');
+    });
+    $("#clear-commands").click(function () {
+        $('input').remove('.command');
+        $('br').remove('.command-break');
+        stream('Cleared Custom Human Commands');
+    });
     function defaultNumberField(elem) {
         document.getElementById(elem+'-text').value = document.getElementById(elem).value;
     }
@@ -221,4 +238,5 @@
             renderCommandBlock(data[0].task_cluster_interval, data[0].task_interval, data[0].tasks_per_cluster, data[0].name, data[0].platform);
         }
     }
+
 </script>
