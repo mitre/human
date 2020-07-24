@@ -56,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--clustersize', type=int, default=TASK_CLUSTER_COUNT)
     parser.add_argument('--taskinterval', type=int, default=TASK_INTERVAL_SECONDS)
     parser.add_argument('--taskgroupinterval', type=int, default=GROUPING_INTERVAL_SECONDS)
-    parser.add_argument('--extra', nargs='+', default=EXTRA_DEFAULTS)
+    parser.add_argument('--extra', nargs='*', default=EXTRA_DEFAULTS)
     args = parser.parse_args()
     run(
         clustersize=args.clustersize,

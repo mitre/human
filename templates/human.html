@@ -204,6 +204,7 @@
         let cmdBlock = $("#delivery-commands");
         cmdBlock.empty();
         $('#human-name-header').text(humanName);
+        extra = renderExtra(extra, platform);
         switch (platform) {
             case "darwin":
                 baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
@@ -240,8 +241,30 @@
 
     function renderLoadedHumanCallback(data){
         if(data){
-            renderCommandBlock(data[0].task_cluster_interval, data[0].task_interval, data[0].tasks_per_cluster, data.extra, data[0].name, data[0].platform);
+            renderCommandBlock(data[0].task_cluster_interval, data[0].task_interval, data[0].tasks_per_cluster, data[0].extra, data[0].name, data[0].platform);
         }
+        sdf;
+    }
+
+    function renderExtra(extra, platform) {
+        let formatted_commands = '';
+        $.each(extra, function(i, command) {
+            switch (platform) {
+                case "darwin":
+                    command = command.replace(/\\/g, '\\\\');
+                    command = command.replace(/"/g, '\\\"');
+                    break;
+                case "linux":
+                    command = command.replace(/\\/g, '\\\\');
+                    command = command.replace(/"/g, '\\\"');
+                    break;
+                case "windows":
+                    command = command.replace(/"/g, '`\"');
+                    break;
+            }
+            formatted_commands += '"' + command + '" ';
+        });
+        return formatted_commands;
     }
 
 </script>
