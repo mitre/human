@@ -258,7 +258,8 @@
                     command = command.replace(/\\/g, '\\\\');
                     command = command.replace(/"/g, '\\\"');
                     break;
-                case "windows":
+                case "windows-psh":
+                    command = command.replace(/`/g, '``');
                     command = command.replace(/"/g, '`\"');
                     break;
             }
