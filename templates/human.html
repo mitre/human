@@ -243,7 +243,6 @@
         if(data){
             renderCommandBlock(data[0].task_cluster_interval, data[0].task_interval, data[0].tasks_per_cluster, data[0].extra, data[0].name, data[0].platform);
         }
-        sdf;
     }
 
     function renderExtra(extra, platform) {
@@ -258,13 +257,10 @@
                     command = command.replace(/\\/g, '\\\\');
                     command = command.replace(/"/g, '\\\"');
                     break;
-                case "windows-psh":
-                    command = command.replace(/`/g, '``');
-                    command = command.replace(/"/g, '`\"');
-                    break;
             }
             formatted_commands += '"' + command + '" ';
         });
+        asdf;
         return formatted_commands;
     }
 
