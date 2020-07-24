@@ -102,3 +102,10 @@
     margin: 5px;
     cursor: pointer;
 }
+
+.delete-command{
+    flex:10%;
+    color:red;
+    cursor:pointer;
+    font-size:22px;
+}

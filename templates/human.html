@@ -78,8 +78,8 @@
                     </ul>
                     <hr>
                     <h4>Custom Commands:</h4>
-                        <button id="append-command" class="command-button"><b>+</b> Add Command</button>
-                        <button id="clear-commands" class="command-button"><b>-</b> Clear Commands</button>
+                        <button id="append-command" class="command-button atomic-button" style="width:30%;background-color:green"><b>+</b> Add Command</button>
+                        <button id="clear-commands" class="command-button atomic-button" style="width:30%;background-color:firebrick"><b>-</b> Clear All Commands</button>
                         <br><br>
                         <div id="input-command">
                             <!-- Place holder for appended custom commands -->
@@ -140,12 +140,11 @@
         stream('Tasks per Cluster - Maximum number of tasks to execute per cluster')
 	 });
     $("#append-command").click(function () {
-        $('#input-command').append('<input type="text" class="command"><br class="command-break">');
+        $('#input-command').append('<div class="command-wrapper" style="display:flex"><input type="text" class="command" style="flex:90%" placeholder="Enter a single command to run"><div class="delete-command" onclick="deleteHumanCommand(this)">&times;</div><br class="command-break"></div>');
         stream('Input Custom Human Command');
     });
     $("#clear-commands").click(function () {
-        $('input').remove('.command');
-        $('br').remove('.command-break');
+        $('.command-wrapper').remove();
         stream('Cleared Custom Human Commands');
     });
     function defaultNumberField(elem) {
@@ -196,6 +195,10 @@
             'extra': commands
         };
         restRequest('POST', postData, renderBuiltHumanCallback, endpoint = '/plugin/human/api');
+    }
+
+    function deleteHumanCommand(elem) {
+        $(elem).parent().remove();
     }
 
     function renderCommandBlock(taskClusterInterval, taskInterval, taskCount, extra, humanName, platform){
@@ -260,7 +263,6 @@
             }
             formatted_commands += '"' + command + '" ';
         });
-        asdf;
         return formatted_commands;
     }
 
