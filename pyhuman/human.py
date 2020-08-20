@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import random
 from importlib import import_module
@@ -10,15 +11,16 @@ from app.utility.webdriver_helper import WebDriverHelper
 TASK_CLUSTER_COUNT = 5
 TASK_INTERVAL_SECONDS = 10
 GROUPING_INTERVAL_SECONDS = 500
+EXTRA_DEFAULTS = []
 
 
-def emulation_loop(workflows, clustersize, taskinterval, taskgroupinterval):
+def emulation_loop(workflows, clustersize, taskinterval, taskgroupinterval, extra):
     while True:
         for c in range(clustersize):
             sleep(random.randrange(taskinterval))
             index = random.randrange(len(workflows))
             print(workflows[index].display)
-            workflows[index].action()
+            workflows[index].action(extra)
         sleep(random.randrange(taskgroupinterval))
 
 
@@ -40,13 +42,13 @@ def load_module(root, file, webdriver_helper):
         print('Error could not load workflow. {}'.format(e))
 
 
-def run(clustersize, taskinterval, taskgroupinterval):
+def run(clustersize, taskinterval, taskgroupinterval, extra):
     random.seed()
     webdriver_helper = WebDriverHelper()
     if webdriver_helper.check_valid_driver_connection():
         workflows = import_workflows(webdriver_helper=webdriver_helper)
         emulation_loop(workflows=workflows, clustersize=clustersize, taskinterval=taskinterval,
-                       taskgroupinterval=taskgroupinterval)
+                       taskgroupinterval=taskgroupinterval, extra=extra)
 
 
 if __name__ == '__main__':
@@ -54,5 +56,11 @@ if __name__ == '__main__':
     parser.add_argument('--clustersize', type=int, default=TASK_CLUSTER_COUNT)
     parser.add_argument('--taskinterval', type=int, default=TASK_INTERVAL_SECONDS)
     parser.add_argument('--taskgroupinterval', type=int, default=GROUPING_INTERVAL_SECONDS)
+    parser.add_argument('--extra', nargs='*', default=EXTRA_DEFAULTS)
     args = parser.parse_args()
-    run(clustersize=args.clustersize, taskinterval=args.taskinterval, taskgroupinterval=args.taskgroupinterval)
+    run(
+        clustersize=args.clustersize,
+        taskinterval=args.taskinterval,
+        taskgroupinterval=args.taskgroupinterval,
+        extra=args.extra
+    )

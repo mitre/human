@@ -77,6 +77,14 @@
                         {% endfor %}
                     </ul>
                     <hr>
+                    <h4>Custom Commands:</h4>
+                        <button id="append-command" class="command-button atomic-button" style="width:30%;background-color:green">Add Command</button>
+                        <button id="clear-commands" class="command-button atomic-button" style="width:30%;background-color:firebrick">Clear Commands</button>
+                        <br><br>
+                        <div id="input-command">
+                            <!-- Place holder for appended custom commands -->
+                        </div>
+                    <hr>
                     <h4>Human behavior configuration:</h4>
                     <table>
                         <tr>
@@ -131,6 +139,14 @@
      $('#duk-task-per-cluster').click(function () {
         stream('Tasks per Cluster - Maximum number of tasks to execute per cluster')
 	 });
+    $("#append-command").click(function () {
+        $('#input-command').append('<div class="command-wrapper" style="display:flex"><input type="text" class="command" style="flex:90%" placeholder="Enter a single command to run"><div class="delete-command" onclick="deleteHumanCommand(this)">&times;</div><br class="command-break"></div>');
+        stream('Input Custom Human Command');
+    });
+    $("#clear-commands").click(function () {
+        $('.command-wrapper').remove();
+        stream('Cleared Custom Human Commands');
+    });
     function defaultNumberField(elem) {
         document.getElementById(elem+'-text').value = document.getElementById(elem).value;
     }
@@ -164,6 +180,10 @@
             warn('Select tasks for your human to execute!');
             return
         }
+        let commands = []
+        $('.command').each(function(){
+            commands.push($(this).val())
+        })
         let postData = {
             'index': 'build_human',
             'platform': platform,
@@ -171,33 +191,39 @@
             'task_cluster_interval': $('#human-cluster-interval').val(),
             'task_interval': $('#human-task-interval').val(),
             'task_count': $('#human-task-count').val(),
-            'tasks': taskList
+            'tasks': taskList,
+            'extra': commands
         };
         restRequest('POST', postData, renderBuiltHumanCallback, endpoint = '/plugin/human/api');
     }
 
-    function renderCommandBlock(taskClusterInterval, taskInterval, taskCount, humanName, platform){
+    function deleteHumanCommand(elem) {
+        $(elem).parent().remove();
+    }
+
+    function renderCommandBlock(taskClusterInterval, taskInterval, taskCount, extra, humanName, platform){
         let http = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port: '');
         let baseHuman = "";
         let cmdBlock = $("#delivery-commands");
         cmdBlock.empty();
         $('#human-name-header').text(humanName);
+        extra = renderExtra(extra, platform);
         switch (platform) {
             case "darwin":
                 baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
                     '&& cd '+humanName+' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r requirements.txt && '+humanName+'/bin/python human.py --clustersize '+taskCount+' ' +
-                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval;
+                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
             case "linux":
                 baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
                     '&& cd '+humanName+' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r requirements.txt && '+humanName+'/bin/python human.py --clustersize '+taskCount+' ' +
-                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval;
+                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
             case "windows-psh":
                 baseHuman = '$server="'+http+'"; $url="$server/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("file","'+humanName+'.zip"); $wc.DownloadFile($url, "$pwd\\'+humanName+'.zip"); ' +
                     'Expand-Archive '+humanName+'.zip -DestinationPath '+humanName+' -Force; cd '+humanName+'; python.exe -m venv '+humanName+';' +
                     '.\\'+humanName+'\\Scripts\\pip.exe install -r requirements.txt; .\\'+humanName+'\\Scripts\\python.exe human.py --clustersize '+taskCount+' ' +
-                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+';';
+                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
         }
         cmdBlock.append(baseHuman);
@@ -212,13 +238,32 @@
             let opts = $('#existing-humans');
             opts.append('<option id="human-'+data.name+'" value="human-'+data.name+'">'+data.name+'</option>');
             opts.find('option[value=human-'+data.name+']').attr('selected','selected');
-            renderCommandBlock(data.task_cluster_interval, data.task_interval, data.tasks_per_cluster, data.name, data.platform);
+            renderCommandBlock(data.task_cluster_interval, data.task_interval, data.tasks_per_cluster, data.extra, data.name, data.platform);
         }
     }
 
     function renderLoadedHumanCallback(data){
         if(data){
-            renderCommandBlock(data[0].task_cluster_interval, data[0].task_interval, data[0].tasks_per_cluster, data[0].name, data[0].platform);
+            renderCommandBlock(data[0].task_cluster_interval, data[0].task_interval, data[0].tasks_per_cluster, data[0].extra, data[0].name, data[0].platform);
         }
     }
+
+    function renderExtra(extra, platform) {
+        let formatted_commands = '';
+        $.each(extra, function(i, command) {
+            switch (platform) {
+                case "darwin":
+                    command = command.replace(/\\/g, '\\\\');
+                    command = command.replace(/"/g, '\\\"');
+                    break;
+                case "linux":
+                    command = command.replace(/\\/g, '\\\\');
+                    command = command.replace(/"/g, '\\\"');
+                    break;
+            }
+            formatted_commands += '"' + command + '" ';
+        });
+        return formatted_commands;
+    }
+
 </script>

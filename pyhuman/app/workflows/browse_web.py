@@ -14,7 +14,7 @@ class WebBrowse(BaseWorkflow):
         super().__init__(name='WebBrowser', description='Select a random website and browse', driver=driver)
         self.website_list = self._load_website_list()
 
-    def action(self):
+    def action(self, extra=None):
         self._web_browse()
 
     """ PRIVATE """

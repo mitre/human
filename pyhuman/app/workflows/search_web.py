@@ -13,7 +13,7 @@ class SearchWeb(BaseWorkflow):
     def __init__(self, driver):
         super().__init__(name='WebSearcher', description='Search for something on google', driver=driver)
 
-    def action(self):
+    def action(self, extra=None):
         self._search_web('MITRE Caldera')
 
     """ PRIVATE """

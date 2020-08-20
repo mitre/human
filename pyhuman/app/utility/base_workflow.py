@@ -16,5 +16,5 @@ class BaseWorkflow(object):
         self.driver = driver
 
     @abstractmethod
-    def action(self):
+    def action(self, extra=None):
         pass
