@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 
 from importlib import import_module
@@ -49,12 +50,16 @@ class HumanService(BaseService):
 
     async def _select_modules_and_compress(self, modules, name, platform, task_interval, task_cluster_interval, tasks_per_cluster, extra):
         algo, args, ext = await self._get_compression_params(platform=platform)
-        chdir = 'cd {} && '.format(self.pyhuman_path)
-        compress = '{} {} {}.{} human.py data/* app/utility/* requirements.txt'.format(
-            algo, args, os.path.abspath(os.path.join(self.human_dir, 'payloads', name)), ext)
-        compress, workflows = await self._append_module_paths(modules, compress)
+        data_files = os.listdir(self.pyhuman_path + '/data')
+        utility_files = os.listdir(self.pyhuman_path + '/app/utility')
+        data_files_rp = ['data/' + file for file in data_files]
+        utility_files_rp = ['app/utility/' + file for file in utility_files]
+        payload_path = os.path.abspath(os.path.join(self.human_dir, 'payloads'))
         self.log.debug('Compressing new human: %s' % name)
-        os.system(chdir + compress)
+        command = [algo, args, payload_path + '/' + name + '.' + ext, 'human.py', 'requirements.txt'] \
+            + data_files_rp + utility_files_rp
+        command, workflows = await self._append_module_paths(modules, command)
+        subprocess.run(command, cwd=self.pyhuman_path)
         await self.data_svc.store(Human(name=name, task_interval=task_interval, task_cluster_interval=task_cluster_interval,
                                         tasks_per_cluster=tasks_per_cluster, platform=platform, extra=extra, workflows=workflows))
 
@@ -64,10 +69,10 @@ class HumanService(BaseService):
             return 'zip', '-qq', 'zip'
         return 'tar', 'zcf', 'tar.gz'
 
-    async def _append_module_paths(self, modules, compress):
+    async def _append_module_paths(self, modules, command):
         workflows = []
         for sm in modules:
             workflow = await self.data_svc.locate('workflows', match=dict(name=sm))
-            compress += ' {}'.format(os.path.join('app', 'workflows', workflow[0].file))
+            command += ['app/workflows/' + workflow[0].file]
             workflows.append(workflow[0])
-        return compress, workflows
+        return command, workflows
