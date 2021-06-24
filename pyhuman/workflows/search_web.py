@@ -1,7 +1,7 @@
 from selenium.webdriver.common.keys import Keys
 from time import sleep
 
-from app.utility.base_workflow import BaseWorkflow
+from ..utility.base_workflow import BaseWorkflow
 
 
 def load(driver):

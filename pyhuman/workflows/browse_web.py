@@ -1,7 +1,8 @@
 import os
 import random
 from time import sleep
-from app.utility.base_workflow import BaseWorkflow
+
+from ..utility.base_workflow import BaseWorkflow
 
 
 def load(driver):
@@ -30,7 +31,7 @@ class WebBrowse(BaseWorkflow):
     @staticmethod
     def _load_website_list():
         wordlist = []
-        with open(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..',
+        with open(os.path.abspath(os.path.join(__file__, '..', '..',
                                                'data', 'websites.txt')), 'r') as f:
             for line in f:
                 wordlist.append(line)

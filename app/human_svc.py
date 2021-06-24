@@ -34,7 +34,7 @@ class HumanService(BaseService):
         return [h.display for h in await self.data_svc.locate('humans', match=dict(name=data.get('name')))]
 
     async def load_available_workflows(self):
-        root = os.path.join(self.pyhuman_path, 'app', 'workflows')
+        root = os.path.join(self.pyhuman_path, 'workflows')
         for f in os.listdir(root):
             if os.path.isfile(os.path.join(root, f)) and not f[0] == '_':
                 await self._load_workflow_module(root, f)
@@ -71,9 +71,9 @@ class HumanService(BaseService):
         file_name = name + '.tar.gz'
         unix_tar = tarfile.open(os.path.join(payload_path, file_name), 'w:gz')
         unix_tar.add(os.path.join(self.pyhuman_path, 'data'), arcname='data/.')
-        unix_tar.add(os.path.join(self.pyhuman_path, 'app', 'utility'), arcname='app/utility/.')
+        unix_tar.add(os.path.join(self.pyhuman_path, 'utility'), arcname='utility/.')
         for behavior in behaviors:
-            unix_tar.add(self.pyhuman_path + behavior, arcname=os.path.join('app', 'workflows',
+            unix_tar.add(self.pyhuman_path + behavior, arcname=os.path.join('workflows',
                                                                            os.path.basename(behavior)))
         unix_tar.add(os.path.join(self.pyhuman_path, 'human.py'), arcname='human.py')
         unix_tar.add(os.path.join(self.pyhuman_path, 'requirements.txt'), arcname='requirements.txt')
@@ -97,6 +97,6 @@ class HumanService(BaseService):
         workflows = []
         for sm in modules:
             workflow = await self.data_svc.locate('workflows', match=dict(name=sm))
-            behaviors += ['/app/workflows/' + workflow[0].file]
+            behaviors += ['/workflows/' + workflow[0].file]
             workflows.append(workflow[0])
         return behaviors, workflows
