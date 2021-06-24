@@ -5,7 +5,7 @@ import random
 from importlib import import_module
 from time import sleep
 
-from app.utility.webdriver_helper import WebDriverHelper
+from utility.webdriver_helper import WebDriverHelper
 
 
 TASK_CLUSTER_COUNT = 5
