@@ -71,7 +71,7 @@ class HumanService(BaseService):
         file_name = name + '.tar.gz'
         unix_tar = tarfile.open(os.path.join(payload_path, file_name), 'w:gz')
         unix_tar.add(os.path.join(self.pyhuman_path, 'data'), arcname='data/.')
-        unix_tar.add(os.path.join(self.pyhuman_path, 'app', 'utility'), arcname='utility/.')
+        unix_tar.add(os.path.join(self.pyhuman_path, 'app', 'utility'), arcname='app/utility/.')
         for behavior in behaviors:
             unix_tar.add(self.pyhuman_path + behavior, arcname=os.path.join('app', 'workflows',
                                                                            os.path.basename(behavior)))
