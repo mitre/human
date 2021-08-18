@@ -2,7 +2,8 @@ import subprocess
 import sys
 from time import sleep
 
-from plugins.human.pyhuman.app.utility.base_workflow import BaseWorkflow
+from ..utility.base_workflow import BaseWorkflow
+
 
 def load(driver):
     return ListFiles(driver=driver)
