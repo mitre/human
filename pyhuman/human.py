@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import random
+import sys
 from importlib import import_module
 from time import sleep
 
@@ -58,9 +59,14 @@ if __name__ == '__main__':
     parser.add_argument('--taskgroupinterval', type=int, default=GROUPING_INTERVAL_SECONDS)
     parser.add_argument('--extra', nargs='*', default=EXTRA_DEFAULTS)
     args = parser.parse_args()
-    run(
-        clustersize=args.clustersize,
-        taskinterval=args.taskinterval,
-        taskgroupinterval=args.taskgroupinterval,
-        extra=args.extra
-    )
+
+    try:
+        run(
+            clustersize=args.clustersize,
+            taskinterval=args.taskinterval,
+            taskgroupinterval=args.taskgroupinterval,
+            extra=args.extra
+        )
+    except KeyboardInterrupt:
+        print(" Terminating human execution...")
+        sys.exit()
