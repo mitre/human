@@ -21,9 +21,13 @@ class WebBrowse(BaseWorkflow):
     """ PRIVATE """
 
     def _web_browse(self):
-        with self.driver as d:
-            d.get('https://' + self._get_random_website())
-            sleep(2)
+        random_website = self._get_random_website()
+        try:
+            with self.driver as d:
+                d.get('https://' + random_website)
+                sleep(2)
+        except Exception as e:
+            print('Error loading random website %s: %s' % (random_website.rstrip(), e))
 
     def _get_random_website(self):
         return random.choice(self.website_list)
