@@ -210,13 +210,13 @@
         extra = renderExtra(extra, platform);
         switch (platform) {
             case "darwin":
-                baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
-                    '&& cd '+humanName+' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r requirements.txt && '+humanName+'/bin/python human.py --clustersize '+taskCount+' ' +
+                baseHuman = 'curl -sk -o \''+humanName+'.tar.gz\' -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir \''+humanName+'\' && tar -C \''+humanName+'\' -zxvf \''+humanName+'.tar.gz\' ' +
+                    '&& cd \''+humanName+'\' && virtualenv -p python3 \''+humanName+'\' && \''+humanName+'/bin/pip\' install -r requirements.txt && \''+humanName+'/bin/python\' human.py --clustersize '+taskCount+' ' +
                     '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
             case "linux":
-                baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
-                    '&& cd '+humanName+' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r requirements.txt && '+humanName+'/bin/python human.py --clustersize '+taskCount+' ' +
+                baseHuman = 'curl -sk -o \''+humanName+'.tar.gz\' -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir \''+humanName+'\' && tar -C \''+humanName+'\' -zxvf \''+humanName+'.tar.gz\' ' +
+                    '&& cd \''+humanName+'\' && virtualenv -p python3 \''+humanName+'\' && \''+humanName+'/bin/pip\' install -r requirements.txt && \''+humanName+'/bin/python\' human.py --clustersize '+taskCount+' ' +
                     '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
             case "windows-psh":
