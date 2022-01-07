@@ -2,9 +2,11 @@ from selenium.webdriver.common.keys import Keys
 from time import sleep
 
 from ..utility.base_workflow import BaseWorkflow
+from ..utility.webdriver_helper import WebDriverHelper
 
 
-def load(driver):
+def load():
+    driver = WebDriverHelper()
     return SearchWeb(driver=driver)
 
 

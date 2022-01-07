@@ -5,14 +5,14 @@ from time import sleep
 from ..utility.base_workflow import BaseWorkflow
 
 
-def load(driver):
-    return ListFiles(driver=driver)
+def load():
+    return ListFiles()
 
 
 class ListFiles(BaseWorkflow):
 
-    def __init__(self, driver):
-        super().__init__(name='ListFiles', description='List files in the current directory', driver=driver)
+    def __init__(self):
+        super().__init__(name='ListFiles', description='List files in the current directory')
 
     def action(self, extra=None):
         self._spawn_shell_and_quit()
