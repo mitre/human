@@ -15,12 +15,6 @@ class WebDriverHelper(BaseDriverHelper):
     @property
     def driver(self):
         return self._driver
-
-    def __enter__(self):
-        return self._driver
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
     
     def cleanup(self):
         self._driver.quit()

@@ -24,9 +24,8 @@ class WebBrowse(BaseWorkflow):
     def _web_browse(self):
         random_website = self._get_random_website()
         try:
-            with self.driver as d:
-                d.get('https://' + random_website)
-                sleep(2)
+            self.driver.driver.get('https://' + random_website)
+            sleep(2)
         except Exception as e:
             print('Error loading random website %s: %s' % (random_website.rstrip(), e))
 

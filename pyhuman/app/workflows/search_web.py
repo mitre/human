@@ -21,15 +21,14 @@ class SearchWeb(BaseWorkflow):
     """ PRIVATE """
 
     def _search_web(self, search_string):
-        with self.driver as d:
-            d.get('https://www.google.com')
-            assert 'Google' in d.title
-            elem = d.find_element_by_name('q')
-            elem.clear()
-            sleep(2)
-            elem.send_keys(search_string)
-            sleep(2)
-            elem.send_keys(Keys.RETURN)
+        self.driver.driver.get('https://www.google.com')
+        assert 'Google' in self.driver.driver.title
+        elem = self.driver.driver.find_element_by_name('q')
+        elem.clear()
+        sleep(2)
+        elem.send_keys(search_string)
+        sleep(2)
+        elem.send_keys(Keys.RETURN)
 
 
 
