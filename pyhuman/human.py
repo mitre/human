@@ -25,12 +25,12 @@ def emulation_loop(workflows, clustersize, taskinterval, taskgroupinterval, extr
 
 def import_workflows():
     extensions = []
-    for root, dirs, files in os.walk(os.path.join('app', 'workflows')):
+    for root, dirs, files in os.walk(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'app', 'workflows')):
         files = [f for f in files if not f[0] == '.' and not f[0] == "_"]
         dirs[:] = [d for d in dirs if not d[0] == '.' and not d[0] == "_"]
         for file in files:
             try:
-                extensions.append(load_module(root, file))
+                extensions.append(load_module('app/workflows', file))
             except Exception as e:
                 print('Error could not load workflow. {}'.format(e))
     return extensions

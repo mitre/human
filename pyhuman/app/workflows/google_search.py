@@ -5,6 +5,9 @@ from ..utility.base_workflow import BaseWorkflow
 from ..utility.webdriver_helper import WebDriverHelper
 
 
+WORKFLOW_NAME = 'GoogleSearcher'
+WORKFLOW_DESCRIPTION = 'Search for something on Google'
+
 DEFAULT_INPUT_WAIT_TIME = 2
 
 
@@ -16,7 +19,7 @@ def load():
 class GoogleSearch(BaseWorkflow):
 
     def __init__(self, driver, input_wait_time=DEFAULT_INPUT_WAIT_TIME):
-        super().__init__(name='GoogleSearcher', description='Search for something on google', driver=driver)
+        super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION, driver=driver)
 
         self.input_wait_time = input_wait_time
 

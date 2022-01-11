@@ -5,6 +5,10 @@ from time import sleep
 from ..utility.base_workflow import BaseWorkflow
 
 
+WORKFLOW_NAME = 'ListFiles'
+WORKFLOW_DESCRIPTION = 'List files in the current directory'
+
+
 def load():
     return ListFiles()
 
@@ -12,7 +16,7 @@ def load():
 class ListFiles(BaseWorkflow):
 
     def __init__(self):
-        super().__init__(name='ListFiles', description='List files in the current directory')
+        super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION)
 
     def action(self, extra=None):
         self._spawn_shell_and_quit()

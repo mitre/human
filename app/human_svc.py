@@ -42,12 +42,14 @@ class HumanService(BaseService):
     """ PRIVATE """
 
     async def _load_workflow_module(self, root, workflow_file):
-        module = os.path.join(root, workflow_file.split('.')[0]).replace(os.path.sep, '.')
+        module_path = os.path.join(root, workflow_file.split('.')[0]).replace(os.path.sep, '.')
         try:
-            loaded = getattr(import_module(module), 'load')()
-            await self.data_svc.store(Workflow(name=loaded.name, description=loaded.description, file=workflow_file))
+            module = import_module(module_path)
+            workflow_name = getattr(module, 'WORKFLOW_NAME')
+            workflow_description = getattr(module, 'WORKFLOW_DESCRIPTION')
+            await self.data_svc.store(Workflow(name=workflow_name, description=workflow_description, file=workflow_file))
         except Exception as e:
-            self.log.error('Error loading extension=%s, %s' % (module, e))
+            self.log.error('Error loading extension=%s, %s' % (module_path, e))
 
     async def _create_windows_archive(self, payload_path, behaviors, name):
         file_name = name + '.zip'
