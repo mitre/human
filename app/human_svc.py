@@ -44,7 +44,7 @@ class HumanService(BaseService):
     async def _load_workflow_module(self, root, workflow_file):
         module = os.path.join(root, workflow_file.split('.')[0]).replace(os.path.sep, '.')
         try:
-            loaded = getattr(import_module(module), 'load')(driver=None)
+            loaded = getattr(import_module(module), 'load')()
             await self.data_svc.store(Workflow(name=loaded.name, description=loaded.description, file=workflow_file))
         except Exception as e:
             self.log.error('Error loading extension=%s, %s' % (module, e))
