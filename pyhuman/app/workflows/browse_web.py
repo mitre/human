@@ -5,6 +5,10 @@ from time import sleep
 from ..utility.base_workflow import BaseWorkflow
 from ..utility.webdriver_helper import WebDriverHelper
 
+
+DEFAULT_INPUT_WAIT_TIME = 2
+
+
 def load():
     driver = WebDriverHelper()
     return WebBrowse(driver=driver)
@@ -12,8 +16,10 @@ def load():
 
 class WebBrowse(BaseWorkflow):
 
-    def __init__(self, driver):
+    def __init__(self, driver, input_wait_time=DEFAULT_INPUT_WAIT_TIME):
         super().__init__(name='WebBrowser', description='Select a random website and browse', driver=driver)
+
+        self.input_wait_time = input_wait_time
         self.website_list = self._load_website_list()
 
     def action(self, extra=None):
@@ -25,7 +31,7 @@ class WebBrowse(BaseWorkflow):
         random_website = self._get_random_website()
         try:
             self.driver.driver.get('https://' + random_website)
-            sleep(2)
+            sleep(self.input_wait_time)
         except Exception as e:
             print('Error loading random website %s: %s' % (random_website.rstrip(), e))
 

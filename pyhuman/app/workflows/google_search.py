@@ -5,15 +5,20 @@ from ..utility.base_workflow import BaseWorkflow
 from ..utility.webdriver_helper import WebDriverHelper
 
 
+DEFAULT_INPUT_WAIT_TIME = 2
+
+
 def load():
     driver = WebDriverHelper()
-    return SearchWeb(driver=driver)
+    return GoogleSearch(driver=driver)
 
 
-class SearchWeb(BaseWorkflow):
+class GoogleSearch(BaseWorkflow):
 
-    def __init__(self, driver):
-        super().__init__(name='WebSearcher', description='Search for something on google', driver=driver)
+    def __init__(self, driver, input_wait_time=DEFAULT_INPUT_WAIT_TIME):
+        super().__init__(name='GoogleSearcher', description='Search for something on google', driver=driver)
+
+        self.input_wait_time = input_wait_time
 
     def action(self, extra=None):
         self._search_web('MITRE Caldera')
@@ -25,9 +30,9 @@ class SearchWeb(BaseWorkflow):
         assert 'Google' in self.driver.driver.title
         elem = self.driver.driver.find_element_by_name('q')
         elem.clear()
-        sleep(2)
+        sleep(self.input_wait_time)
         elem.send_keys(search_string)
-        sleep(2)
+        sleep(self.input_wait_time)
         elem.send_keys(Keys.RETURN)
 
 
