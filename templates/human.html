@@ -211,19 +211,19 @@
         switch (platform) {
             case "darwin":
                 baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
-                    '&& cd '+humanName+' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r requirements.txt && '+humanName+'/bin/python human.py --clustersize '+taskCount+' ' +
+                    ' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r '+humanName+'/requirements.txt && '+humanName+'/bin/python '+humanName+'/human.py --clustersize '+taskCount+' ' +
                     '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
             case "linux":
                 baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
-                    '&& cd '+humanName+' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r requirements.txt && '+humanName+'/bin/python human.py --clustersize '+taskCount+' ' +
+                    ' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r '+humanName+'/requirements.txt && '+humanName+'/bin/python '+humanName+'/human.py --clustersize '+taskCount+' ' +
                     '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
             case "windows-psh":
                 baseHuman = '$server="'+http+'"; $url="$server/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("file","'+humanName+'.zip"); $wc.DownloadFile($url, "$pwd\\'+humanName+'.zip"); ' +
-                    'Expand-Archive '+humanName+'.zip -DestinationPath '+humanName+' -Force; cd '+humanName+'; python.exe -m venv '+humanName+';' +
-                    '.\\'+humanName+'\\Scripts\\pip.exe install -r requirements.txt; .\\'+humanName+'\\Scripts\\python.exe human.py --clustersize '+taskCount+' ' +
-                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
+                'Expand-Archive '+humanName+'.zip -DestinationPath '+humanName+' -Force; python.exe -m venv '+humanName+';' +
+                '.\\'+humanName+'\\Scripts\\pip.exe install -r '+humanName+'\\requirements.txt; .\\'+humanName+'\\Scripts\\python.exe '+humanName+'\\human.py --clustersize '+taskCount+' ' +
+                '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
         }
         cmdBlock.append(baseHuman);
