@@ -3,14 +3,18 @@ import subprocess
 from ..utility.base_workflow import BaseWorkflow
 
 
-def load(driver):
-    return ExecuteCommand(driver=driver)
+WORKFLOW_NAME = 'ExecuteCommand'
+WORKFLOW_DESCRIPTION = 'Execute Custom Commands'
+
+
+def load():
+    return ExecuteCommand()
 
 
 class ExecuteCommand(BaseWorkflow):
 
-    def __init__(self, driver):
-        super().__init__(name='ExecuteCommand', description='Execute Custom Commands', driver=driver)
+    def __init__(self):
+        super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION)
 
     @staticmethod
     def action(extra=None):

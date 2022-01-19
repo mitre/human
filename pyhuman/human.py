@@ -1,12 +1,10 @@
 import argparse
-import json
+import signal
 import os
 import random
 import sys
 from importlib import import_module
 from time import sleep
-
-from app.utility.webdriver_helper import WebDriverHelper
 
 
 TASK_CLUSTER_COUNT = 5
@@ -25,31 +23,39 @@ def emulation_loop(workflows, clustersize, taskinterval, taskgroupinterval, extr
         sleep(random.randrange(taskgroupinterval))
 
 
-def import_workflows(webdriver_helper):
+def import_workflows():
     extensions = []
     for root, dirs, files in os.walk(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'app', 'workflows')):
         files = [f for f in files if not f[0] == '.' and not f[0] == "_"]
         dirs[:] = [d for d in dirs if not d[0] == '.' and not d[0] == "_"]
         for file in files:
-            extensions.append(load_module(os.path.join('app', 'workflows'), file, webdriver_helper))
+            try:
+                extensions.append(load_module('app/workflows', file))
+            except Exception as e:
+                print('Error could not load workflow. {}'.format(e))
     return extensions
 
 
-def load_module(root, file, webdriver_helper):
+def load_module(root, file):
     module = os.path.join(root, file.split('.')[0]).replace(os.path.sep, '.')
-    try:
-        return getattr(import_module(module), 'load')(driver=webdriver_helper)
-    except Exception as e:
-        print('Error could not load workflow. {}'.format(e))
+    workflow_module = import_module(module)
+    return getattr(workflow_module, 'load')()
 
 
 def run(clustersize, taskinterval, taskgroupinterval, extra):
     random.seed()
-    webdriver_helper = WebDriverHelper()
-    if webdriver_helper.check_valid_driver_connection():
-        workflows = import_workflows(webdriver_helper=webdriver_helper)
-        emulation_loop(workflows=workflows, clustersize=clustersize, taskinterval=taskinterval,
-                       taskgroupinterval=taskgroupinterval, extra=extra)
+    workflows = import_workflows()
+
+    def signal_handler(sig, frame):
+        for workflow in workflows:
+            workflow.cleanup()
+        exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    emulation_loop(workflows=workflows, clustersize=clustersize, taskinterval=taskinterval,
+                    taskgroupinterval=taskgroupinterval, extra=extra)
 
 
 if __name__ == '__main__':
