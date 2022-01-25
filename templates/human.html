@@ -111,52 +111,91 @@
                         <span id="message"></span>
                     </div>
                 </div>
-                <div class="column column-interior" style="text-align: left;">
-                    <select id="existing-humans" style="width: 100%;margin-left: 0;" onchange="refreshSelectHuman(this);">
-                        <option disabled="disabled" selected="">Select existing human...</option>
-                        {% for h in humans %}
-                        <option id="human-{{h.name}}" value="human-{{h.name}}">{{h.name}}</option>
-                        {% endfor %}
-                    </select>
+                <div class="column column-interior human-box" style="text-align: left;">
+                    <table>
+                        <tr>
+                            <td><p>CALDERA Server IP: </p></td>
+                            <td><input id="server-ip" type="text" value="http://localhost:8888" placeholder="http://localhost:8888" oninput="updateRenderedHuman();" /></td>
+                        </tr>
+                        <tr>
+                            <td><p>Select existing human: </p></td>
+                            <td>
+                                <select id="existing-humans" style="width: 100%;margin-left: 0;" onchange="refreshSelectHuman(this);">
+                                    <option disabled="disabled" selected="">Select existing human...</option>
+                                    {% for h in humans %}
+                                    <option id="human-{{h.name}}" value="human-{{h.name}}">{{h.name}}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                        </tr>
+                    </table>
                     <hr/>
-                    <code id="delivery-commands" style="text-align: left; font-size:14px;"></code>
+                    <div class="box container">
+                        <a class="button is-small is-outlined cmd-copy-button" @click="copyCommandToClipboard();" x-show="window.isSecureContext">
+                            <span class="icon"><i class="far fa-lg fa-copy"></i></span>
+                            <span>Copy</span>
+                        </a>
+                        <br /><br />
+                        <code id="delivery-commands" style="text-align: left; font-size:14px;"></code>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 <script>
+    /**
+     * Function that stores and renders a human command. When no new human is provided, calling the function will still re-render the command
+     * to account for other input changes.
+     */
+    const updateRenderedHuman = (() => {
+        let human_data = null;
+        return (new_human=null) => {
+            if (new_human) human_data = new_human;
+            if (human_data) renderCommandBlock(human_data.task_cluster_interval, human_data.task_interval, human_data.tasks_per_cluster, human_data.extra, human_data.name, human_data.platform);
+        };
+    })();
+
     $( document ).ready(function () {
         ['human-task-interval', 'human-cluster-interval', 'human-task-count'].forEach(elem => defaultNumberField(elem));
         stream('Design and generate a human to create noise on hosts');
-     });
-     $('#duk-task-sleep-interval').click(function() {
-		 stream('Task Sleep Interval - Maximum sleep time between individual tasks executing')
-	 });
-     $('#duk-cluster-sleep-interval').click(function () {
-     	stream('Task Cluster Sleep Interval - Maximum sleep time between clusters of tasks executing')
-     });
-     $('#duk-task-per-cluster').click(function () {
-        stream('Tasks per Cluster - Maximum number of tasks to execute per cluster')
-	 });
-    $("#append-command").click(function () {
+    });
+
+    $('#duk-task-sleep-interval').click(function() {
+        stream('Task Sleep Interval - Maximum sleep time between individual tasks executing')
+    });
+
+    $('#duk-cluster-sleep-interval').click(function () {
+    stream('Task Cluster Sleep Interval - Maximum sleep time between clusters of tasks executing')
+    });
+
+    $('#duk-task-per-cluster').click(function () {
+    stream('Tasks per Cluster - Maximum number of tasks to execute per cluster')
+    });
+
+    $('#append-command').click(function () {
         $('#input-command').append('<div class="command-wrapper" style="display:flex"><input type="text" class="command" style="flex:90%" placeholder="Enter a single command to run"><div class="delete-command" onclick="deleteHumanCommand(this)">&times;</div><br class="command-break"></div>');
         stream('Input Custom Human Command');
     });
-    $("#clear-commands").click(function () {
+
+    $('#clear-commands').click(function () {
         $('.command-wrapper').remove();
         stream('Cleared Custom Human Commands');
     });
+    
     function defaultNumberField(elem) {
         document.getElementById(elem+'-text').value = document.getElementById(elem).value;
     }
+
     function updateNumberField(elem){
         document.getElementById(elem.name+'-text').value=elem.value;
     }
+
     function updateSlider(elem) {
         let slider = elem.id.replace('-text', '');
         document.getElementById(slider).value = elem.value;
     }
+
     function generateHuman() {
         let cmdBlock = $("#delivery-commands");
         cmdBlock.empty();
@@ -202,7 +241,7 @@
     }
 
     function renderCommandBlock(taskClusterInterval, taskInterval, taskCount, extra, humanName, platform){
-        let http = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port: '');
+        let http = getServerIP();
         let baseHuman = "";
         let cmdBlock = $("#delivery-commands");
         cmdBlock.empty();
@@ -230,22 +269,14 @@
     }
 
     function refreshSelectHuman(selected){
-        restRequest('POST', {'index':'load_human', 'name':selected.value.replace('human-', '')}, renderLoadedHumanCallback, endpoint='/plugin/human/api');
+        restRequest('POST', {'index':'load_human', 'name':selected.value.replace('human-', '')}, data => updateRenderedHuman(data[0]), endpoint='/plugin/human/api');
     }
 
     function renderBuiltHumanCallback(data){
-        if(data){
-            let opts = $('#existing-humans');
-            opts.append('<option id="human-'+data.name+'" value="human-'+data.name+'">'+data.name+'</option>');
-            opts.find('option[value=human-'+data.name+']').attr('selected','selected');
-            renderCommandBlock(data.task_cluster_interval, data.task_interval, data.tasks_per_cluster, data.extra, data.name, data.platform);
-        }
-    }
-
-    function renderLoadedHumanCallback(data){
-        if(data){
-            renderCommandBlock(data[0].task_cluster_interval, data[0].task_interval, data[0].tasks_per_cluster, data[0].extra, data[0].name, data[0].platform);
-        }
+        let opts = $('#existing-humans');
+        opts.append('<option id="human-'+data.name+'" value="human-'+data.name+'">'+data.name+'</option>');
+        opts.find('option[value=human-'+data.name+']').attr('selected','selected');
+        updateRenderedHuman(data);
     }
 
     function renderExtra(extra, platform) {
@@ -264,6 +295,12 @@
             formatted_commands += '"' + command + '" ';
         });
         return formatted_commands;
+    }
+
+    function getServerIP() {
+        const provided_value = $('#server-ip').val();
+        const default_value = `${location.protocol}//${location.hostname}:${location.port}`;
+        return provided_value || default_value;
     }
 
 </script>
