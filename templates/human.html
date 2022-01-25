@@ -115,7 +115,7 @@
                     <table>
                         <tr>
                             <td><p>CALDERA Server IP: </p></td>
-                            <td><input id="server-ip" type="text" placeholder="http://localhost:8888" oninput="updateRenderedHuman();" /></td>
+                            <td><input id="server-ip" type="text" value="http://localhost:8888" placeholder="http://localhost:8888" oninput="updateRenderedHuman();" /></td>
                         </tr>
                         <tr>
                             <td><p>Select existing human: </p></td>
@@ -130,7 +130,14 @@
                         </tr>
                     </table>
                     <hr/>
-                    <code id="delivery-commands" style="text-align: left; font-size:14px;"></code>
+                    <div class="box container">
+                        <a class="button is-small is-outlined cmd-copy-button" @click="copyCommandToClipboard();" x-show="window.isSecureContext">
+                            <span class="icon"><i class="far fa-lg fa-copy"></i></span>
+                            <span>Copy</span>
+                        </a>
+                        <br /><br />
+                        <code id="delivery-commands" style="text-align: left; font-size:14px;"></code>
+                    </div>
                 </div>
             </div>
         </div>
@@ -269,7 +276,6 @@
         let opts = $('#existing-humans');
         opts.append('<option id="human-'+data.name+'" value="human-'+data.name+'">'+data.name+'</option>');
         opts.find('option[value=human-'+data.name+']').attr('selected','selected');
-        
         updateRenderedHuman(data);
     }
 
@@ -294,7 +300,6 @@
     function getServerIP() {
         const provided_value = $('#server-ip').val();
         const default_value = `${location.protocol}//${location.hostname}:${location.port}`;
-
         return provided_value || default_value;
     }
 
