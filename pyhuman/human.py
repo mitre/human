@@ -37,7 +37,7 @@ def import_workflows():
 
 
 def load_module(root, file):
-    module = os.path.join(root, file.split('.')[0]).replace(os.path.sep, '.')
+    module = os.path.join(*root.split('/'), file.split('.')[0]).replace(os.path.sep, '.')
     workflow_module = import_module(module)
     return getattr(workflow_module, 'load')()
 
