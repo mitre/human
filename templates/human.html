@@ -131,11 +131,13 @@
                     </table>
                     <hr/>
                     <div class="box container">
-                        <a class="button is-small is-outlined cmd-copy-button" @click="copyCommandToClipboard();" x-show="window.isSecureContext">
-                            <span class="icon"><i class="far fa-lg fa-copy"></i></span>
-                            <span>Copy</span>
-                        </a>
-                        <br /><br />
+                        <div x-show="window.isSecureContext">
+                            <a class="button is-small is-outlined cmd-copy-button" @click="copyCommandToClipboard();">
+                                <span class="icon"><i class="far fa-lg fa-copy"></i></span>
+                                <span>Copy</span>
+                            </a>
+                            <br /><br />
+                        </div>
                         <code id="delivery-commands" style="text-align: left; font-size:14px;"></code>
                     </div>
                 </div>
@@ -295,6 +297,11 @@
             formatted_commands += '"' + command + '" ';
         });
         return formatted_commands;
+    }
+
+    function copyCommandToClipboard() {
+        const command = $('#delivery-commands')[0].innerText;
+        navigator.clipboard.writeText(command);
     }
 
     function getServerIP() {
