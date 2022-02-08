@@ -3,6 +3,8 @@ import sys
 from time import sleep
 import ssl
 import urllib.request
+import json
+import random
 
 from ..utility.base_workflow import BaseWorkflow
 
@@ -21,15 +23,21 @@ class DownloadFiles(BaseWorkflow):
         super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION)
 
     def action(self, extra=None):
-        self._download_files()
+        self._download_xkcd()
 
 
     """ PRIVATE """
-    def _download_files(self):
+    # def _download_files(self):
+    #     ssl._create_default_https_context = ssl._create_unverified_context
+    #     file_url = 'https://imgs.xkcd.com/comics/file_transfer.png'
+    #     urllib.request.urlretrieve(file_url, "file_downloaded.jpg")
+    #     sleep(5)
+
+    def _download_xkcd(self):
         ssl._create_default_https_context = ssl._create_unverified_context
-        file_url = 'https://imgs.xkcd.com/comics/file_transfer.png'
-        urllib.request.urlretrieve(file_url, "file_downloaded.jpg")
-        sleep(5)
-
-
+        xkcd_url = "https://xkcd.com/" + str(random.randint(1, 1000)) + "/info.0.json"
+        request = urllib.request.urlopen(xkcd_url)
+        pic_url = json.load(request)['img']
+        pic_name = pic_url.split("https://imgs.xkcd.com/comics/", 1)[1]
+        urllib.request.urlretrieve(pic_url, pic_name)
 
