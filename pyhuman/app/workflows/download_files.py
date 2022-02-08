@@ -24,16 +24,13 @@ class DownloadFiles(BaseWorkflow):
         super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION)
 
     def action(self, extra=None):
-        self._download_xkcd()
-        self._download_wikipedia()
+        self._download_files()
 
 
     """ PRIVATE """
-    # def _download_files(self):
-    #     ssl._create_default_https_context = ssl._create_unverified_context
-    #     file_url = 'https://imgs.xkcd.com/comics/file_transfer.png'
-    #     urllib.request.urlretrieve(file_url, "file_downloaded.jpg")
-    #     sleep(5)
+    def _download_files(self):
+        random_function_selector = [self._download_xkcd, self._download_wikipedia]
+        random.choice(random_function_selector)()
 
     def _download_wikipedia(self):
         url = "https://en.wikipedia.org/wiki/Special:Random"
