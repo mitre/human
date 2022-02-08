@@ -5,6 +5,7 @@ import ssl
 import urllib.request
 import json
 import random
+import requests
 
 from ..utility.base_workflow import BaseWorkflow
 
@@ -24,6 +25,7 @@ class DownloadFiles(BaseWorkflow):
 
     def action(self, extra=None):
         self._download_xkcd()
+        self._download_wikipedia()
 
 
     """ PRIVATE """
@@ -32,6 +34,12 @@ class DownloadFiles(BaseWorkflow):
     #     file_url = 'https://imgs.xkcd.com/comics/file_transfer.png'
     #     urllib.request.urlretrieve(file_url, "file_downloaded.jpg")
     #     sleep(5)
+
+    def _download_wikipedia(self):
+        url = "https://en.wikipedia.org/wiki/Special:Random"
+        r = requests.get(url, verify=False)
+        wiki_name = "wiki" + str(random.randint(1, 100000)) + ".html"
+        open(wiki_name, 'wb').write(r.content)
 
     def _download_xkcd(self):
         ssl._create_default_https_context = ssl._create_unverified_context
