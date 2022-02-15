@@ -50,7 +50,7 @@ class DownloadFiles(BaseWorkflow):
 
     def _download_nist(self):
         # Get random page of NIST search results
-        nist_search_url = self.get_random_nist_url()
+        nist_search_url = "https://www.nist.gov/publications/search?k=&t=&a=&ps=All&n=&d[min]=&d[max]=&page=" + str(random.randint(1, 2000))
         nist_search_text = requests.get(nist_search_url).text
         nist_search_soup = BeautifulSoup(nist_search_text, features="lxml")
         publications_links = (nist_search_soup.select('a[href^="/publications"]'))
@@ -65,8 +65,3 @@ class DownloadFiles(BaseWorkflow):
             file_url = (publication_download_link.get('href'))
             file_name = publication_url.split("https://www.nist.gov/publications/", 1)[1] + ".pdf"
             urllib.request.urlretrieve(file_url, file_name)
-
-    def get_random_nist_url(self):
-        # return "https://www.nist.gov/publications/search"
-        url = "https://www.nist.gov/publications/search?k=&t=&a=&ps=All&n=&d[min]=&d[max]=&page=" + str(random.randint(1, 2000))
-        return url
