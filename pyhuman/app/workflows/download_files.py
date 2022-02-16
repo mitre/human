@@ -1,6 +1,6 @@
 import subprocess
 import sys
-from time import sleep
+import os
 import ssl
 import urllib.request
 import json
@@ -32,23 +32,24 @@ class DownloadFiles(BaseWorkflow):
     """ PRIVATE """
     def _download_files(self):
         random_function_selector = [self._download_xkcd, self._download_wikipedia, self._download_nist]
-        random.choice(random_function_selector)()
+        dir = os.path.join(os.path.expanduser("~"), "Downloads")
+        random.choice(random_function_selector)(dir)
 
-    def _download_wikipedia(self):
+    def _download_wikipedia(self, dir):
         url = "https://en.wikipedia.org/wiki/Special:Random"
         r = requests.get(url, verify=False)
         wiki_name = "wiki" + str(random.randint(1, 100000)) + ".html"
-        open(wiki_name, 'wb').write(r.content)
+        open(os.path.join(dir, wiki_name), 'wb').write(r.content)
 
-    def _download_xkcd(self):
+    def _download_xkcd(self, dir):
         ssl._create_default_https_context = ssl._create_unverified_context
         xkcd_url = "https://xkcd.com/" + str(random.randint(1, 1000)) + "/info.0.json"
         request = urllib.request.urlopen(xkcd_url)
         pic_url = json.load(request)['img']
         pic_name = pic_url.split("https://imgs.xkcd.com/comics/", 1)[1]
-        urllib.request.urlretrieve(pic_url, pic_name)
+        urllib.request.urlretrieve(pic_url, os.path.join(dir, pic_name))
 
-    def _download_nist(self):
+    def _download_nist(self, dir):
         # Get random page of NIST search results
         nist_search_url = "https://www.nist.gov/publications/search?k=&t=&a=&ps=All&n=&d[min]=&d[max]=&page=" + str(random.randint(1, 2000))
         nist_search_text = requests.get(nist_search_url).text
@@ -64,4 +65,4 @@ class DownloadFiles(BaseWorkflow):
         if publication_download_link is not None:
             file_url = (publication_download_link.get('href'))
             file_name = publication_url.split("https://www.nist.gov/publications/", 1)[1] + ".pdf"
-            urllib.request.urlretrieve(file_url, file_name)
+            urllib.request.urlretrieve(file_url,  os.path.join(dir, file_name))
