@@ -1,5 +1,3 @@
-import subprocess
-import sys
 import os
 import ssl
 import urllib.request
@@ -8,6 +6,7 @@ import random
 import requests
 from bs4 import BeautifulSoup
 from random import choice
+from time import sleep
 
 from ..utility.base_workflow import BaseWorkflow
 
@@ -15,6 +14,7 @@ from ..utility.base_workflow import BaseWorkflow
 WORKFLOW_NAME = 'DownloadFiles'
 WORKFLOW_DESCRIPTION = 'Download files'
 
+DEFAULT_INPUT_WAIT_TIME = 2
 
 def load():
     return DownloadFiles()
@@ -22,8 +22,9 @@ def load():
 
 class DownloadFiles(BaseWorkflow):
 
-    def __init__(self):
+    def __init__(self, input_wait_time=DEFAULT_INPUT_WAIT_TIME):
         super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION)
+        self.input_wait_time = input_wait_time
 
     def action(self, extra=None):
         self._download_files()
@@ -34,6 +35,7 @@ class DownloadFiles(BaseWorkflow):
         random_function_selector = [self._download_xkcd, self._download_wikipedia, self._download_nist]
         dir = os.path.join(os.path.expanduser("~"), "Downloads")
         random.choice(random_function_selector)(dir)
+        sleep(self.input_wait_time)
 
     def _download_wikipedia(self, dir):
         url = "https://en.wikipedia.org/wiki/Special:Random"
