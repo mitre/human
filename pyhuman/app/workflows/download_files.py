@@ -46,6 +46,7 @@ class DownloadFiles(BaseWorkflow):
         open(os.path.join(directory, file_name), 'wb').write(request.content)
 
     def _download_xkcd(self, directory):
+        # Disable certificate verification. Will display warning when run.
         ssl._create_default_https_context = ssl._create_unverified_context
         xkcd_url = "https://xkcd.com/" + str(random.randint(1, 1000)) + "/info.0.json"
         request = urllib.request.urlopen(xkcd_url)
@@ -56,8 +57,8 @@ class DownloadFiles(BaseWorkflow):
     def _download_nist(self, directory):
         # Get random page of NIST search results
         nist_search_url = "https://www.nist.gov/publications/search?k=&t=&a=&ps=All&n=&d[min]=&d[max]=&page=" + str(random.randint(1, 2000))
-        nist_search_text = requests.get(nist_search_url).text
-        nist_search_soup = BeautifulSoup(nist_search_text, features="lxml")
+        nist_search_request = requests.get(nist_search_url).text
+        nist_search_soup = BeautifulSoup(nist_search_request, features="lxml")
         publications_links = (nist_search_soup.select('a[href^="/publications"]'))
 
         # Download random publication from the NIST search page
