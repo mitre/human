@@ -41,7 +41,10 @@ class DownloadFiles(BaseWorkflow):
 
     def _download_wikipedia(self, directory):
         url = "https://en.wikipedia.org/wiki/Special:Random"
-        request = requests.get(url, verify=False)
+        try:
+            request = requests.get(url, verify=False)
+        except urllib.error.URLError:
+            return
         file_name = "wiki" + str(random.randint(1, 100000)) + ".html"
         open(os.path.join(directory, file_name), 'wb').write(request.content)
 
@@ -49,10 +52,16 @@ class DownloadFiles(BaseWorkflow):
         # Disable certificate verification. Will display warning when run.
         ssl._create_default_https_context = ssl._create_unverified_context
         xkcd_url = "https://xkcd.com/" + str(random.randint(1, 1000)) + "/info.0.json"
-        request = urllib.request.urlopen(xkcd_url)
+        try:
+            request = urllib.request.urlopen(xkcd_url)
+        except urllib.error.URLError:
+            return
         pic_url = json.load(request)['img']
         pic_name = pic_url.split("https://imgs.xkcd.com/comics/", 1)[1]
-        urllib.request.urlretrieve(pic_url, os.path.join(directory, pic_name))
+        try:
+            urllib.request.urlretrieve(pic_url, os.path.join(directory, pic_name))
+        except urllib.error.URLError:
+            return
 
     def _download_nist(self, directory):
         # Get random page of NIST search results
@@ -70,4 +79,8 @@ class DownloadFiles(BaseWorkflow):
         if publication_download_link is not None:
             file_url = (publication_download_link.get('href'))
             file_name = publication_url.split("https://www.nist.gov/publications/", 1)[1] + ".pdf"
-            urllib.request.urlretrieve(file_url,  os.path.join(directory, file_name))
+            try:
+                urllib.request.urlretrieve(file_url,  os.path.join(directory, file_name))
+            except urllib.error.URLError:
+                return
+
