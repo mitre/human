@@ -222,7 +222,7 @@
             case "windows-psh":
                 baseHuman = '$server="'+http+'"; $url="$server/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("file","'+humanName+'.zip"); $wc.DownloadFile($url, "$pwd\\'+humanName+'.zip"); ' +
                     'Expand-Archive "'+humanName+'.zip" -DestinationPath "'+humanName+'" -Force; cd "'+humanName+'"; python.exe -m venv "'+humanName+'";' +
-                    'Start-Process -FilePath ".\\'+humanName+'\\Scripts\\pip.exe" -ArgumentList "install -r requirements.txt"; Start-Process -FilePath ".\\\\'+humanName+'\\\\Scripts\\\\python.exe" -ArgumentList "human.py --clustersize '+taskCount+' ' +
+                    'Start-Process -FilePath ".\\'+humanName+'\\Scripts\\pip.exe" -ArgumentList "install -r requirements.txt" -Wait; Start-Process -FilePath ".\\\\'+humanName+'\\\\Scripts\\\\python.exe" -ArgumentList "human.py --clustersize '+taskCount+' ' +
                     '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra+'"';
                 break;
         }
