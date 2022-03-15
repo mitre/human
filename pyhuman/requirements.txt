@@ -8,3 +8,5 @@ requests
 selenium
 urllib3
 webdriver-manager
+beautifulsoup4
+lxml
