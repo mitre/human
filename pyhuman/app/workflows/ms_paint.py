@@ -7,7 +7,7 @@ from ..utility.base_workflow import BaseWorkflow
 
 
 WORKFLOW_NAME = 'MicrosoftPaint'
-WORKFLOW_DESCRIPTION = 'Create a blank MS Paint file'
+WORKFLOW_DESCRIPTION = 'Create a blank MS Paint file (Windows)'
 
 DEFAULT_INPUT_WAIT_TIME = 2
 
@@ -34,12 +34,13 @@ class msPaint(BaseWorkflow):
         os.startfile(paint_path)
         # time.sleep(1)
         # pyautogui.click()
+        pyautogui.getWindowsWithTitle("Paint")
+        time.sleep(1)
         pyautogui.hotkey('ctrl', 's')
         file_name = int(time.time())
+        time.sleep(1)
         pyautogui.typewrite(str(file_name))
-        # time.sleep(1)
+        time.sleep(1)
         pyautogui.press('enter')
+        time.sleep(1)
         pyautogui.hotkey('alt', 'f4')
-
-
-
