@@ -4,6 +4,7 @@ colorama
 configparser
 crayons
 idna
+pyautogui
 requests
 selenium
 urllib3
