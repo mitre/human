@@ -202,6 +202,7 @@
     }
 
     function renderCommandBlock(taskClusterInterval, taskInterval, taskCount, extra, humanName, platform){
+        console.log(taskClusterInterval, taskInterval, taskCount, extra, humanName, platform);
         let http = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port: '');
         let baseHuman = "";
         let cmdBlock = $("#delivery-commands");
@@ -229,15 +230,20 @@
         cmdBlock.append(baseHuman);
     }
 
-    function refreshSelectHuman(selected){
-        restRequest('POST', {'index':'load_human', 'name':selected.value.replace('human-', '')}, renderLoadedHumanCallback, endpoint='/plugin/human/api');
+    function refreshSelectHuman(selected) {
+        // Name stored in the list is in the format 'human-name-of-human', the backend expects the name to look like 'name of human'
+        let modifiedName = selected.value.replace('human-', '');
+        modifiedName = modifiedName.replaceAll('-', ' ');
+        restRequest('POST', {'index': 'load_human', 'name': modifiedName}, renderLoadedHumanCallback, endpoint='/plugin/human/api');
     }
 
     function renderBuiltHumanCallback(data){
-        if(data){
+        if(typeof data === 'object' && data !== null) {
+            // Remove spaces from name and appends 'human-' to fit key structure
+            let modifiedName = 'human-' + data.name.replaceAll(' ', '-');
             let opts = $('#existing-humans');
-            opts.append('<option id="human-'+data.name+'" value="human-'+data.name+'">'+data.name+'</option>');
-            opts.find('option[value=human-'+data.name+']').attr('selected','selected');
+            opts.append('<option id="' + modifiedName + '" value="' + modifiedName + '">' + data.name + '</option>');
+            opts.find('option[value=human-' + modifiedName + ']').attr('selected', 'selected');
             renderCommandBlock(data.task_cluster_interval, data.task_interval, data.tasks_per_cluster, data.extra, data.name, data.platform);
         }
     }
