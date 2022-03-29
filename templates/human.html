@@ -242,7 +242,7 @@
             let modifiedName = 'human-' + data.name.replaceAll(' ', '-');
             let opts = $('#existing-humans');
             opts.append('<option id="' + modifiedName + '" value="' + modifiedName + '">' + data.name + '</option>');
-            opts.find('option[value=human-' + modifiedName + ']').attr('selected', 'selected');
+            opts.find('option[value=' + modifiedName + ']').attr('selected', 'selected');
             renderCommandBlock(data.task_cluster_interval, data.task_interval, data.tasks_per_cluster, data.extra, data.name, data.platform);
         }
     }
