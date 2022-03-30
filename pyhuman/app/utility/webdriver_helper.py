@@ -1,19 +1,23 @@
 from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
 
+from .base_driver import BaseDriverHelper
 
-class WebDriverHelper:
+DRIVER_NAME = 'ChromeWebDriver'
+
+class WebDriverHelper(BaseDriverHelper):
 
     def __init__(self):
-        self.driver = None
+        super().__init__(name=DRIVER_NAME)
         self._driver_path = ChromeDriverManager().install()
+        self._driver = webdriver.Chrome(self._driver_path)
 
-    def __enter__(self):
-        self.driver = webdriver.Chrome(self._driver_path)
-        return self.driver
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.driver.quit()
+    @property
+    def driver(self):
+        return self._driver
+    
+    def cleanup(self):
+        self._driver.quit()
 
     """ PRIVATE """
 
