@@ -251,33 +251,38 @@
         extra = renderExtra(extra, platform);
         switch (platform) {
             case "darwin":
-                baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
-                    ' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r '+humanName+'/requirements.txt && '+humanName+'/bin/python '+humanName+'/human.py --clustersize '+taskCount+' ' +
+                baseHuman = 'curl -sk -o \''+humanName+'.tar.gz\' -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir \''+humanName+'\' && tar -C \''+humanName+'\' -zxvf \''+humanName+'.tar.gz\' ' +
+                    ' && virtualenv -p python3 \''+humanName+'\' && \''+humanName+'/bin/pip\' install -r \''+humanName+'/requirements.txt\' && \''+humanName+'/bin/python\' \''+humanName+'/human.py\' --clustersize '+taskCount+' ' +
                     '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
             case "linux":
-                baseHuman = 'curl -sk -o '+humanName+'.tar.gz -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir '+humanName+' && tar -C '+humanName+' -zxvf '+humanName+'.tar.gz ' +
-                    ' && virtualenv -p python3 '+humanName+' && '+humanName+'/bin/pip install -r '+humanName+'/requirements.txt && '+humanName+'/bin/python '+humanName+'/human.py --clustersize '+taskCount+' ' +
+                baseHuman = 'curl -sk -o \''+humanName+'.tar.gz\' -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir \''+humanName+'\' && tar -C \''+humanName+'\' -zxvf \''+humanName+'.tar.gz\' ' +
+                    ' && virtualenv -p python3 \''+humanName+'\' && \''+humanName+'/bin/pip\' install -r \''+humanName+'/requirements.txt\' && \''+humanName+'/bin/python\' \''+humanName+'/human.py\' --clustersize '+taskCount+' ' +
                     '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
             case "windows-psh":
                 baseHuman = '$server="'+http+'"; $url="$server/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("file","'+humanName+'.zip"); $wc.DownloadFile($url, "$pwd\\'+humanName+'.zip"); ' +
-                'Expand-Archive '+humanName+'.zip -DestinationPath '+humanName+' -Force; python.exe -m venv '+humanName+';' +
-                '.\\'+humanName+'\\Scripts\\pip.exe install -r '+humanName+'\\requirements.txt; .\\'+humanName+'\\Scripts\\python.exe '+humanName+'\\human.py --clustersize '+taskCount+' ' +
-                '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
+                    'Expand-Archive "'+humanName+'.zip" -DestinationPath "'+humanName+'" -Force; python.exe -m venv "'+humanName+'";' +
+                    'Start-Process -FilePath ".\\'+humanName+'\\Scripts\\pip.exe" -ArgumentList "install -r '+humanName+'\\requirements.txt" -Wait; Start-Process -FilePath ".\\\\'+humanName+'\\\\Scripts\\\\python.exe" -ArgumentList "'+humanName+'\\human.py --clustersize '+taskCount+' ' +
+                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra+'"';
                 break;
         }
         cmdBlock.append(baseHuman);
     }
 
-    function refreshSelectHuman(selected){
-        restRequest('POST', {'index':'load_human', 'name':selected.value.replace('human-', '')}, data => updateRenderedHuman(data[0]), endpoint='/plugin/human/api');
+    function refreshSelectHuman(selected) {
+        // Name stored in the list is in the format 'human-name-of-human', the backend expects the name to look like 'name of human'
+        let modifiedName = selected.value.replace('human-', '');
+        modifiedName = modifiedName.replaceAll('-', ' ');
+        restRequest('POST', {'index': 'load_human', 'name': modifiedName}, data => updateRenderedHuman(data[0]), endpoint='/plugin/human/api');
     }
 
     function renderBuiltHumanCallback(data){
+        // Remove spaces from name and appends 'human-' to fit key structure
+        let modifiedName = 'human-' + data.name.replaceAll(' ', '-');
         let opts = $('#existing-humans');
-        opts.append('<option id="human-'+data.name+'" value="human-'+data.name+'">'+data.name+'</option>');
-        opts.find('option[value=human-'+data.name+']').attr('selected','selected');
+        opts.append('<option id="' + modifiedName + '" value="' + modifiedName + '">' + data.name + '</option>');
+        opts.find('option[value=' + modifiedName + ']').attr('selected', 'selected');
         updateRenderedHuman(data);
     }
 
