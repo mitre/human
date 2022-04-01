@@ -1,6 +1,6 @@
 import os
-import time
 import pyautogui
+from time import sleep
 
 from ..utility.base_workflow import BaseWorkflow
 
@@ -27,16 +27,16 @@ class msPaint(BaseWorkflow):
     """ PRIVATE """
 
     @staticmethod
-    def _ms_paint():
+    def _ms_paint(self):
         paint_path = "C:\Windows\System32\mspaint.exe"
         os.startfile(paint_path)
         pyautogui.getWindowsWithTitle("Paint")
-        time.sleep(1)
+        sleep(self.input_wait_time)
         pyautogui.hotkey('ctrl', 's')
         file_name = int(time.time())
-        time.sleep(1)
+        sleep(self.input_wait_time)
         pyautogui.typewrite(str(file_name))
-        time.sleep(1)
+        sleep(self.input_wait_time)
         pyautogui.press('enter')
-        time.sleep(1)
+        sleep(self.input_wait_time)
         pyautogui.hotkey('alt', 'f4')
