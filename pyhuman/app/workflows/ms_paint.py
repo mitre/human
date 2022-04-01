@@ -3,8 +3,6 @@ import time
 import pyautogui
 
 from ..utility.base_workflow import BaseWorkflow
-# from ..utility.webdriver_helper import WebDriverHelper
-
 
 WORKFLOW_NAME = 'MicrosoftPaint'
 WORKFLOW_DESCRIPTION = 'Create a blank MS Paint file (Windows)'
@@ -32,8 +30,6 @@ class msPaint(BaseWorkflow):
     def _ms_paint():
         paint_path = "C:\Windows\System32\mspaint.exe"
         os.startfile(paint_path)
-        # time.sleep(1)
-        # pyautogui.click()
         pyautogui.getWindowsWithTitle("Paint")
         time.sleep(1)
         pyautogui.hotkey('ctrl', 's')
