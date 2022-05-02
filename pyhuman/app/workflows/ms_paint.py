@@ -42,4 +42,5 @@ class msPaint(BaseWorkflow):
         sleep(self.input_wait_time)
         self.pyautogui.press('enter')
         sleep(self.input_wait_time)
+        self.pyautogui.getWindowsWithTitle('Paint')
         self.pyautogui.hotkey('alt', 'f4')
