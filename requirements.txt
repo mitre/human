@@ -1,3 +1,5 @@
 selenium==3.141.0
 webdriver-manager==3.5.2
+pyautogui==0.9.53
 beautifulsoup4
+
