@@ -161,6 +161,8 @@
     $( document ).ready(function () {
         ['human-task-interval', 'human-cluster-interval', 'human-task-count'].forEach(elem => defaultNumberField(elem));
         stream('Design and generate a human to create noise on hosts');
+        document.getElementById("server-ip").placeholder = `${location.protocol}//${location.hostname}:${location.port}`;
+        document.getElementById("server-ip").value = `${location.protocol}//${location.hostname}:${location.port}`;
     });
 
     $('#duk-task-sleep-interval').click(function() {
