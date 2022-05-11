@@ -1,10 +1,10 @@
-from selenium.webdriver.common.keys import Keys
 from time import sleep
 import os
 import random
 
 from ..utility.base_workflow import BaseWorkflow
 from ..utility.webdriver_helper import WebDriverHelper
+from selenium.webdriver.common.keys import Keys
 
 WORKFLOW_NAME = 'GoogleSearcher'
 WORKFLOW_DESCRIPTION = 'Search for a random search term on Google'
