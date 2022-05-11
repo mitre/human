@@ -10,7 +10,7 @@ WORKFLOW_NAME = 'GoogleSearcher'
 WORKFLOW_DESCRIPTION = 'Search for a random search term on Google'
 
 DEFAULT_INPUT_WAIT_TIME = 2
-
+SEARCH_LIST = 'google_searches.txt'
 
 def load():
     driver = WebDriverHelper()
@@ -51,7 +51,7 @@ class GoogleSearch(BaseWorkflow):
     def _load_search_list():
         wordlist = []
         with open(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..',
-                                               'data', 'google_searches.txt')), 'r') as f:
+                                               'data', SEARCH_LIST)), 'r') as f:
             for line in f:
                 wordlist.append(line)
         return wordlist
