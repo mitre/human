@@ -7,7 +7,7 @@ from ..utility.webdriver_helper import WebDriverHelper
 from selenium.webdriver.common.keys import Keys
 
 WORKFLOW_NAME = 'GoogleSearcher'
-WORKFLOW_DESCRIPTION = 'Search for a random search term on Google'
+WORKFLOW_DESCRIPTION = 'Search for something on Google'
 
 DEFAULT_INPUT_WAIT_TIME = 2
 SEARCH_LIST = 'google_searches.txt'
