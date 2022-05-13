@@ -49,9 +49,8 @@ class GoogleSearch(BaseWorkflow):
 
     @staticmethod
     def _load_search_list():
-        wordlist = []
         with open(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..',
-                                               'data', SEARCH_LIST)), 'r') as f:
-            for line in f:
-                wordlist.append(line)
+                                               'data', SEARCH_LIST))) as f:
+            wordlist = f.readlines()
         return wordlist
+
