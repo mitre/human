@@ -39,8 +39,6 @@ class GoogleSearch(BaseWorkflow):
             elem.clear()
             sleep(self.input_wait_time)
             elem.send_keys(random_search)
-            sleep(self.input_wait_time)
-            elem.send_keys(Keys.RETURN)
         except Exception as e:
             print('Error performing google search %s: %s' % (random_search.rstrip(), e))
 
