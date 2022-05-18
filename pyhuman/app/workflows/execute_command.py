@@ -4,7 +4,7 @@ from ..utility.base_workflow import BaseWorkflow
 
 
 WORKFLOW_NAME = 'ExecuteCommand'
-WORKFLOW_DESCRIPTION = 'Execute Custom Commands'
+WORKFLOW_DESCRIPTION = 'Execute custom commands'
 
 
 def load():
