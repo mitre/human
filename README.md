@@ -17,4 +17,4 @@ On the CALDERA server, there are additional python packages required to use the 
 * Python package `virtualenv`
 * Google Chrome
 
-[Read the full docs](https://github.com/mitre/caldera/wiki/Plugins-human)
+[Read more about the Human Plugin](https://caldera.readthedocs.io/en/latest/Plugin-library.html?#human)
