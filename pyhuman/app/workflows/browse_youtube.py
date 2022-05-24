@@ -4,6 +4,9 @@ import random
 
 from ..utility.base_workflow import BaseWorkflow
 from ..utility.webdriver_helper import WebDriverHelper
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
 
 WORKFLOW_NAME = 'YoutubeBrowser'
 WORKFLOW_DESCRIPTION = 'Browse Youtube'
@@ -36,7 +39,11 @@ class GoogleSearch(BaseWorkflow):
         self.driver.driver.get('https://www.youtube.com/results?search_query={}'.format(str(random_search)))
         sleep(random.randrange(2,9))
         
-      
+        WebDriverWait(self.driver.driver, 10).until(EC.presence_of_all_elements_located((By.ID, "video-title")))
+        links = self.driver.driver.find_elements_by_id("video-title")
+        links[random.randrange(0,len(links)-1)].click()
+
+
     def _get_random_search(self):
         return random.choice(self.search_list)
 
