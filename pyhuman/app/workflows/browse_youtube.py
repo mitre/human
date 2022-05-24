@@ -34,15 +34,31 @@ class GoogleSearch(BaseWorkflow):
 
     def _search_web(self):
         random_search = self._get_random_search()
+
+        # Navigate to youtube
         self.driver.driver.get('https://www.youtube.com')
         sleep(random.randrange(2,9))
+
+        # Perform a youtube search
         self.driver.driver.get('https://www.youtube.com/results?search_query={}'.format(str(random_search)))
         sleep(random.randrange(2,9))
         
+        # Click on a random video from the search results
         WebDriverWait(self.driver.driver, 10).until(EC.presence_of_all_elements_located((By.ID, "video-title")))
-        links = self.driver.driver.find_elements_by_id("video-title")
-        links[random.randrange(0,len(links)-1)].click()
+        search_results = self.driver.driver.find_elements_by_id("video-title")
+        search_results[random.randrange(0,len(search_results)-1)].click()
+        sleep(3)
 
+        # Click on a random video from the suggested videos
+        for i in range(0,random.randrange(0,10)):
+            sleep(3)
+            suggested_videos = self.driver.driver.find_elements_by_id("video-title")
+            try:
+                suggested_videos[random.randrange(0,len(suggested_videos)-1)].click()
+            except Exception as e:
+                pass
+
+            
 
     def _get_random_search(self):
         return random.choice(self.search_list)
