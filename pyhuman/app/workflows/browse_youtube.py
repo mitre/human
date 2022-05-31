@@ -40,6 +40,7 @@ class GoogleSearch(BaseWorkflow):
         sleep(random.randrange(2,9))
 
         # Perform a youtube search
+        # @ TODO: Do a real search by typing into the textbox instead of navigating directly via url
         self.driver.driver.get('https://www.youtube.com/results?search_query={}'.format(str(random_search)))
         sleep(random.randrange(2,9))
         
@@ -55,10 +56,9 @@ class GoogleSearch(BaseWorkflow):
             suggested_videos = self.driver.driver.find_elements_by_id("video-title")
             try:
                 suggested_videos[random.randrange(0,len(suggested_videos)-1)].click()
+            # @ TODO: Investigate this exception
             except Exception as e:
                 pass
-
-            
 
     def _get_random_search(self):
         return random.choice(self.search_list)
