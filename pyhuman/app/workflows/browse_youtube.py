@@ -39,25 +39,21 @@ class GoogleSearch(BaseWorkflow):
         self.driver.driver.get('https://www.youtube.com')
         sleep(random.randrange(2,9))
 
-        # Perform a youtube search
-        # @ TODO: Do a real search by typing into the textbox instead of navigating directly via url
-        # @ TODO: Make waiting times random
-   
+        # Perform a youtube search   
         search_element = self.driver.driver.find_element_by_css_selector('input#search') # search bar
         search_element.send_keys(random_search)
         search_element.submit()
-        sleep(2)
 
-        
         # Click on a random video from the search results
         WebDriverWait(self.driver.driver, 10).until(EC.presence_of_all_elements_located((By.ID, "video-title")))
         search_results = self.driver.driver.find_elements_by_id("video-title")
         search_results[random.randrange(0,len(search_results)-1)].click()
-        sleep(3)
+        # "Watch" the video for a random amount of time @TODO: Increase the "watch time"
+        sleep(random.randrange(2,9))
 
         # Click on a random video from the suggested videos
         for i in range(0,random.randrange(0,10)):
-            sleep(3)
+            sleep(random.randrange(2,9))
             suggested_videos = self.driver.driver.find_elements_by_id("video-title")
             try:
                 suggested_videos[random.randrange(0,len(suggested_videos)-1)].click()
