@@ -2,6 +2,8 @@ from time import sleep
 import os
 import random
 
+# from soupsieve import select
+
 from ..utility.base_workflow import BaseWorkflow
 from ..utility.webdriver_helper import WebDriverHelper
 from selenium.webdriver.common.by import By
@@ -12,7 +14,7 @@ WORKFLOW_NAME = 'YoutubeBrowser'
 WORKFLOW_DESCRIPTION = 'Browse Youtube'
 
 DEFAULT_INPUT_WAIT_TIME = 2
-MAX_WATCH_TIME = 15 # Maximum amount of time to watch a video, in seconds
+MAX_WATCH_TIME = 150 # Maximum amount of time to watch a video, in seconds
 MAX_WAIT_TIME = 5 # Maximum amount of time to wait after searching, in seconds
 MAX_SUGGESTED_VIDEOS = 10
 
