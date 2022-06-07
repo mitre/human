@@ -9,6 +9,7 @@ from ..utility.webdriver_helper import WebDriverHelper
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
+from selenium.common.exceptions import ElementNotInteractableException
 
 WORKFLOW_NAME = 'YoutubeBrowser'
 WORKFLOW_DESCRIPTION = 'Browse Youtube'
@@ -43,28 +44,27 @@ class GoogleSearch(BaseWorkflow):
 
         # Navigate to youtube
         self.driver.driver.get('https://www.youtube.com')
-        sleep(random.randrange(2,MAX_WAIT_TIME))
+        sleep(random.randrange(2, MAX_WAIT_TIME))
 
         # Perform a youtube search
         search_element = self.driver.driver.find_element_by_css_selector('input#search') # search bar
         search_element.send_keys(random_search)
         search_element.submit()
-        sleep(random.randrange(2,MAX_WAIT_TIME))
+        sleep(random.randrange(2, MAX_WAIT_TIME))
 
         # Click on a random video from the search results
         WebDriverWait(self.driver.driver, 10).until(EC.presence_of_all_elements_located((By.ID, "video-title")))
         search_results = self.driver.driver.find_elements_by_id("video-title")
-        search_results[random.randrange(0,len(search_results)-1)].click()
-        sleep(random.randrange(2,MAX_WATCH_TIME))
+        search_results[random.randrange(0, len(search_results)-1)].click()
+        sleep(random.randrange(2, MAX_WATCH_TIME))
 
         # Click on a random video from the suggested videos
         for _ in range(0,random.randrange(0,MAX_SUGGESTED_VIDEOS)):
-            sleep(random.randrange(2,MAX_WAIT_TIME))
+            sleep(random.randrange(2, MAX_WAIT_TIME))
             suggested_videos = self.driver.driver.find_elements_by_id("video-title")
             try:
                 suggested_videos[random.randrange(0,len(suggested_videos)-1)].click()
-            # @ TODO: Investigate this exception
-            except Exception as e:
+            except ElementNotInteractableException as e:
                 pass
 
     def _get_random_search(self):
