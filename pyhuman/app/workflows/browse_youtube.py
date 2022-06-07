@@ -12,6 +12,10 @@ WORKFLOW_NAME = 'YoutubeBrowser'
 WORKFLOW_DESCRIPTION = 'Browse Youtube'
 
 DEFAULT_INPUT_WAIT_TIME = 2
+MAX_WATCH_TIME = 15 # Maximum amount of time to watch a video, in seconds
+MAX_WAIT_TIME = 5 # Maximum amount of time to wait after searching, in seconds
+MAX_SUGGESTED_VIDEOS = 10
+
 SEARCH_LIST = 'browse_youtube.txt'
 
 def load():
@@ -37,23 +41,23 @@ class GoogleSearch(BaseWorkflow):
 
         # Navigate to youtube
         self.driver.driver.get('https://www.youtube.com')
-        sleep(random.randrange(2,9))
+        sleep(random.randrange(2,MAX_WAIT_TIME))
 
-        # Perform a youtube search   
+        # Perform a youtube search
         search_element = self.driver.driver.find_element_by_css_selector('input#search') # search bar
         search_element.send_keys(random_search)
         search_element.submit()
+        sleep(random.randrange(2,MAX_WAIT_TIME))
 
         # Click on a random video from the search results
         WebDriverWait(self.driver.driver, 10).until(EC.presence_of_all_elements_located((By.ID, "video-title")))
         search_results = self.driver.driver.find_elements_by_id("video-title")
         search_results[random.randrange(0,len(search_results)-1)].click()
-        # "Watch" the video for a random amount of time @TODO: Increase the "watch time"
-        sleep(random.randrange(2,9))
+        sleep(random.randrange(2,MAX_WATCH_TIME))
 
         # Click on a random video from the suggested videos
-        for i in range(0,random.randrange(0,10)):
-            sleep(random.randrange(2,9))
+        for _ in range(0,random.randrange(0,MAX_SUGGESTED_VIDEOS)):
+            sleep(random.randrange(2,MAX_WAIT_TIME))
             suggested_videos = self.driver.driver.find_elements_by_id("video-title")
             try:
                 suggested_videos[random.randrange(0,len(suggested_videos)-1)].click()
@@ -63,7 +67,6 @@ class GoogleSearch(BaseWorkflow):
 
     def _get_random_search(self):
         search_term = random.choice(self._load_search_list()).rstrip('\n')
-        # print(type(search_term), "--"+search_term+"--")
         return search_term
 
     @staticmethod
