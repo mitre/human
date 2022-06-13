@@ -25,10 +25,10 @@ SEARCH_LIST = 'browse_youtube.txt'
 
 def load():
     driver = WebDriverHelper()
-    return GoogleSearch(driver=driver)
+    return YoutubeSearch(driver=driver)
 
 
-class GoogleSearch(BaseWorkflow):
+class YoutubeSearch(BaseWorkflow):
 
     def __init__(self, driver, input_wait_time=DEFAULT_INPUT_WAIT_TIME):
         super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION, driver=driver)
