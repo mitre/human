@@ -5,6 +5,7 @@ import random
 from ..utility.base_workflow import BaseWorkflow
 from ..utility.webdriver_helper import WebDriverHelper
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.by import By
 
 WORKFLOW_NAME = 'GoogleSearcher'
 WORKFLOW_DESCRIPTION = 'Search for something on Google'
@@ -35,7 +36,7 @@ class GoogleSearch(BaseWorkflow):
         try:
             self.driver.driver.get('https://www.google.com')
             assert 'Google' in self.driver.driver.title
-            elem = self.driver.driver.find_element_by_name('q')
+            elem = self.driver.driver.find_element(By.NAME ,'q')
             elem.clear()
             sleep(self.input_wait_time)
             elem.send_keys(random_search)
