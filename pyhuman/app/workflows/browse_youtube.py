@@ -49,21 +49,21 @@ class YoutubeSearch(BaseWorkflow):
         sleep(random.randrange(MIN_WAIT_TIME, MAX_WAIT_TIME))
 
         # Perform a youtube search
-        search_element = self.driver.driver.find_element_by_css_selector('input#search') # search bar
+        search_element = self.driver.driver.find_element(By.CSS_SELECTOR, 'input#search') # search bar
         search_element.send_keys(random_search)
         search_element.submit()
         sleep(random.randrange(MIN_WAIT_TIME, MAX_WAIT_TIME))
 
         # Click on a random video from the search results
         WebDriverWait(self.driver.driver, 10).until(EC.presence_of_all_elements_located((By.ID, "video-title")))
-        search_results = self.driver.driver.find_elements_by_id("video-title")
+        search_results = self.driver.driver.find_elements(By.ID, "video-title")
         search_results[random.randrange(0, len(search_results)-1)].click()
         sleep(random.randrange(MIN_WATCH_TIME, MAX_WATCH_TIME))
 
         # Click on a random video from the suggested videos
         for _ in range(0,random.randrange(0,MAX_SUGGESTED_VIDEOS)):
             sleep(random.randrange(MIN_WAIT_TIME, MAX_WAIT_TIME))
-            suggested_videos = self.driver.driver.find_elements_by_id("video-title")
+            suggested_videos = self.driver.driver.find_elements(By.ID, "video-title")
             try:
                 suggested_videos[random.randrange(0,len(suggested_videos)-1)].click()
             except ElementNotInteractableException as e:
