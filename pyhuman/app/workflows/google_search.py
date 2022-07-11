@@ -50,6 +50,11 @@ class GoogleSearch(BaseWorkflow):
             for _ in range(0,random.randint(0,MAX_PAGES)):
                 self.driver.driver.find_element(By.LINK_TEXT, "Next").click()
                 sleep(DEFAULT_INPUT_WAIT_TIME)
+            
+            # Click on one of the search results
+            element = self.driver.driver.find_element(By.CLASS_NAME, "yuRUbf")
+            element.click()
+            sleep(DEFAULT_INPUT_WAIT_TIME)
 
         except Exception as e:
             print('Error performing google search %s: %s' % (random_search.rstrip(), e))
