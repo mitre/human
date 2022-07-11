@@ -11,6 +11,7 @@ WORKFLOW_NAME = 'GoogleSearcher'
 WORKFLOW_DESCRIPTION = 'Search for something on Google'
 
 DEFAULT_INPUT_WAIT_TIME = 2
+MAX_PAGES = 0
 SEARCH_LIST = 'google_searches.txt'
 
 def load():
@@ -41,8 +42,14 @@ class GoogleSearch(BaseWorkflow):
             sleep(self.input_wait_time)
             elem.send_keys(random_search)
 
+            # Scroll
             self.driver.driver.execute_script("window.scrollTo(0, document.body.Height)")
             sleep(DEFAULT_INPUT_WAIT_TIME)
+
+            # Click through search result pages
+            for _ in range(0,random.randint(0,MAX_PAGES)):
+                self.driver.driver.find_element(By.LINK_TEXT, "Next").click()
+                sleep(DEFAULT_INPUT_WAIT_TIME)
 
         except Exception as e:
             print('Error performing google search %s: %s' % (random_search.rstrip(), e))
