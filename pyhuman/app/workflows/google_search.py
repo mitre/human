@@ -40,6 +40,10 @@ class GoogleSearch(BaseWorkflow):
             elem.clear()
             sleep(self.input_wait_time)
             elem.send_keys(random_search)
+
+            self.driver.driver.execute_script("window.scrollTo(0, document.body.Height)")
+            sleep(DEFAULT_INPUT_WAIT_TIME)
+
         except Exception as e:
             print('Error performing google search %s: %s' % (random_search.rstrip(), e))
 
