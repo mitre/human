@@ -8,7 +8,6 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium import webdriver
 from selenium.webdriver.common.action_chains import ActionChains
 
 WORKFLOW_NAME = 'GoogleSearcher'
@@ -47,7 +46,6 @@ class GoogleSearch(BaseWorkflow):
 
             # Randomly choose whether to google a search term or click lucky button
             chosen_action = random.choice(["search-term", "lucky"])
-            # print(chosen_action)
 
             if chosen_action == "search-term":
                 self._google_search(random_search)
@@ -98,7 +96,6 @@ class GoogleSearch(BaseWorkflow):
         for _ in range(0, navigation_clicks):
             clickables = self.driver.driver.find_elements(By.TAG_NAME, ("a"))
             if len(clickables) == 0:
-                # print("there are no clickables")
                 return
             clickable = random.choice(clickables)
             try:
