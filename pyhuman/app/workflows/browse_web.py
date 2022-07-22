@@ -10,8 +10,8 @@ WORKFLOW_NAME = 'WebBrowser'
 WORKFLOW_DESCRIPTION = 'Select a random website and browse'
 
 DEFAULT_INPUT_WAIT_TIME = 2
-MAX_NAVIGATION_CLICKS = 5
-DEFAULT_WAIT_TIME = 2
+MAX_NAVIGATION_CLICKS = 15
+DEFAULT_WAIT_TIME = 1
 
 def load():
     driver = WebDriverHelper()
@@ -33,7 +33,7 @@ class WebBrowse(BaseWorkflow):
 
     def _web_browse(self):
         random_website = self._get_random_website()
-        print("Browsing to", random_website)
+        print("Browsing to", random_website.rstrip())
         try:
             self.driver.driver.get('https://' + random_website)
             sleep(self.input_wait_time)
