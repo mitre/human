@@ -7,10 +7,14 @@ DRIVER_NAME = 'ChromeWebDriver'
 
 class WebDriverHelper(BaseDriverHelper):
 
+    options = webdriver.ChromeOptions()
+    options.add_argument("--disable-gpu")
+    options.add_argument('--ignore-certificate-errors')
+
     def __init__(self):
         super().__init__(name=DRIVER_NAME)
         self._driver_path = ChromeDriverManager().install()
-        self._driver = webdriver.Chrome(self._driver_path)
+        self._driver = webdriver.Chrome(self._driver_path, options=self.options)
 
     @property
     def driver(self):
