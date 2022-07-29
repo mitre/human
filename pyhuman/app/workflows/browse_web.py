@@ -14,6 +14,7 @@ WORKFLOW_DESCRIPTION = 'Select a random website and browse'
 
 MAX_NAVIGATION_CLICKS = 15
 DEFAULT_WAIT_TIME = 1
+DEFAULT_TIMEOUT = 45
 
 def load():
     driver = WebDriverHelper()
@@ -22,11 +23,14 @@ def load():
 
 class WebBrowse(BaseWorkflow):
 
-    def __init__(self, driver, default_wait_time=DEFAULT_WAIT_TIME, max_navigation_clicks=MAX_NAVIGATION_CLICKS):
+    def __init__(self, driver, default_wait_time=DEFAULT_WAIT_TIME, 
+                               max_navigation_clicks=MAX_NAVIGATION_CLICKS, 
+                               default_timeout=DEFAULT_TIMEOUT):
         super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION, driver=driver)
 
         self.default_wait_time = default_wait_time
         self.max_navigation_clicks = max_navigation_clicks
+        self.default_timeout = default_timeout
         self.website_list = self._load_website_list()
 
     def action(self, extra=None):
@@ -35,9 +39,8 @@ class WebBrowse(BaseWorkflow):
     """ PRIVATE """
 
     def _web_browse(self):
-        self.driver.driver.set_page_load_timeout(45)
-        random_website = self._get_random_website()
-        self._browse(random_website)
+        self.driver.driver.set_page_load_timeout(self.default_timeout)
+        self._browse(self._get_random_website())
         sleep(self.default_wait_time)
         self._navigate_website()
 
