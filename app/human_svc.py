@@ -22,7 +22,7 @@ class HumanService(BaseService):
 
     async def build_human(self, data):
         try:
-            name = data.pop('name')
+            _, name = os.path.split(data.pop('name'))
             await self._select_modules_and_compress(modules=data.pop('tasks'), name=name, platform=data.pop('platform'),
                                                     task_interval=data.pop('task_interval'), tasks_per_cluster=data.pop('task_count'),
                                                     task_cluster_interval=data.pop('task_cluster_interval'), extra=data.pop('extra', []))
