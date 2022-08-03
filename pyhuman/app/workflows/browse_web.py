@@ -13,7 +13,7 @@ WORKFLOW_NAME = 'WebBrowser'
 WORKFLOW_DESCRIPTION = 'Select a random website and browse'
 
 MAX_NAVIGATION_CLICKS = 15
-DEFAULT_WAIT_TIME = 1
+MAX_SLEEP_TIME = 20
 DEFAULT_TIMEOUT = 45
 
 def load():
@@ -23,12 +23,12 @@ def load():
 
 class WebBrowse(BaseWorkflow):
 
-    def __init__(self, driver, default_wait_time=DEFAULT_WAIT_TIME, 
+    def __init__(self, driver, max_sleep_time=MAX_SLEEP_TIME, 
                                max_navigation_clicks=MAX_NAVIGATION_CLICKS, 
                                default_timeout=DEFAULT_TIMEOUT):
         super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION, driver=driver)
 
-        self.default_wait_time = default_wait_time
+        self.max_sleep_time = max_sleep_time
         self.max_navigation_clicks = max_navigation_clicks
         self.default_timeout = default_timeout
         self.website_list = self._load_website_list()
@@ -41,7 +41,7 @@ class WebBrowse(BaseWorkflow):
     def _web_browse(self):
         self.driver.driver.set_page_load_timeout(self.default_timeout)
         self._browse(self._get_random_website())
-        sleep(self.default_wait_time)
+        sleep(random.randint(1,self.max_sleep_time))
         self._navigate_website()
 
 
@@ -89,7 +89,7 @@ class WebBrowse(BaseWorkflow):
                 try:
                     self.driver.driver.get(url)
                     print(f"... {num_click}. Navigated to {url}")
-                    sleep(self.default_wait_time)
+                    sleep(random.randint(1,self.max_sleep_time))
                 except TimeoutException as error:
                     print(f"Timeout loading {url.rstrip()}: {error}")
                 except InvalidArgumentException as error:
