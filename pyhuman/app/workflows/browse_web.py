@@ -89,6 +89,7 @@ class WebBrowse(BaseWorkflow):
                 try:
                     self.driver.driver.get(url)
                     print(f"... {num_click}. Navigated to {url}")
+                    sleep(self.default_wait_time)
                 except TimeoutException as error:
                     print(f"Timeout loading {url.rstrip()}: {error}")
                 except InvalidArgumentException as error:
