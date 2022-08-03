@@ -34,8 +34,7 @@ class DownloadFiles(BaseWorkflow):
     """ PRIVATE """
 
     def _download_files(self):
-        random_function_selector = [self._download_xkcd, self._download_wikipedia]
-        # random_function_selector = [self._download_xkcd, self._download_wikipedia, self._download_nist]
+        random_function_selector = [self._download_xkcd, self._download_wikipedia, self._download_nist]
         directory = os.path.join(os.path.expanduser("~"), "Downloads")
         random.choice(random_function_selector)(directory)
         sleep(self.input_wait_time)
