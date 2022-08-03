@@ -47,10 +47,7 @@ class WebBrowse(BaseWorkflow):
 
     def _get_random_website(self):
         # Get a random website from the list of websites
-        try:
-            return random.choice(self.website_list)
-        except Exception as error:
-            print(f"Error getting random website from website list: {error}")
+        return random.choice(self.website_list)
 
 
     def _browse(self, random_website):
