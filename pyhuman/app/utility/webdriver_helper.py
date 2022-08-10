@@ -10,6 +10,8 @@ class WebDriverHelper(BaseDriverHelper):
     options = webdriver.ChromeOptions()
     options.add_argument("--disable-gpu")
     options.add_argument('--ignore-certificate-errors')
+    options.add_argument("start-maximized")
+    options.add_argument("disable-infobars")
 
     def __init__(self):
         super().__init__(name=DRIVER_NAME)
