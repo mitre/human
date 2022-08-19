@@ -7,23 +7,46 @@ from time import sleep
 import random
 
 
-WORKFLOW_NAME = 'TextFile'
-WORKFLOW_DESCRIPTION = 'This is a new behavior'
+WORKFLOW_NAME = 'DocumentManipulation'
+WORKFLOW_DESCRIPTION = 'Create documents with Apache OpenOffice (Windows)'
 
 
 sleeptime = 2
 openoffice_path = "C:\Program Files (x86)\OpenOffice 4\program\soffice"
 
 def load():
-    return NewBehavior()
+    return DocumentManipulation()
 
-class NewBehavior(BaseWorkflow):
+class DocumentManipulation(BaseWorkflow):
 
     def __init__(self):
         super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION)
 
     def action(self, extra=None):
         self._create_document()
+
+    def _create_document(self):
+        self.new_document()
+        # Type a lot
+        for i in range(0, random.randint(2,10)):
+            print("type words", i)
+            random.choice([pyautogui.typewrite(TextLorem().paragraph()), pyautogui.typewrite(TextLorem().sentence())])
+            pyautogui.press('enter')
+        sleep(sleeptime)
+        # Random actions
+        for i in range(0, random.randint(6,15)):
+            print("actions", i)
+            random.choice([
+                self.write_sentence,
+                self.write_paragraph,
+                self.copy_paste, 
+                self.insert_comment,
+                self.find,
+                self.random_formatting])()
+            sleep(sleeptime)
+
+        self.save_quit()
+
 
     def insert_comment(self):
         print("Inserting a comment")
@@ -71,11 +94,10 @@ class NewBehavior(BaseWorkflow):
         ['shift' , 'left'],
         ['shift' , 'up']
         ]
-        pyautogui.hotkey(*random.choice(selection_params))
+        pyautogui.hotkey(*random.choice(selection_params)) #@@ use tuples?
 
     def random_formatting(self):
         self.select_text()
-
         sleep(sleeptime)
         print("Formatting")
         formatting_params = [
@@ -86,7 +108,7 @@ class NewBehavior(BaseWorkflow):
         ['ctrl','e'], # Center
         ['ctrl','5'] # Set 1.5 line spacing
         ]
-        pyautogui.hotkey(*random.choice(formatting_params))
+        pyautogui.hotkey(*random.choice(formatting_params)) #@@ use tuples?
         print("...Done")
         sleep(sleeptime)
 
@@ -133,29 +155,6 @@ class NewBehavior(BaseWorkflow):
     def write_sentence(self):
         pyautogui.typewrite(TextLorem().sentence()), 
 
-    def _create_document(self):
-        self.new_document()
-
-        # Type a lot
-        for i in range(0, random.randint(2,10)):
-            print("type words", i)
-            random.choice([pyautogui.typewrite(TextLorem().paragraph()), pyautogui.typewrite(TextLorem().sentence())])
-            pyautogui.press('enter')
-        sleep(sleeptime)
-
-        # Random actions
-        for i in range(0, random.randint(6,15)):
-            print("actions", i)
-            random.choice([
-                self.write_sentence,
-                self.write_paragraph,
-                self.copy_paste, 
-                self.insert_comment,
-                self.find,
-                self.random_formatting])()
-            sleep(sleeptime)
-
-        self.save_quit()
 
 
 
