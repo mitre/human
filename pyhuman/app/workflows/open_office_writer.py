@@ -7,8 +7,8 @@ from time import sleep
 import random
 
 
-WORKFLOW_NAME = 'DocumentManipulation'
-WORKFLOW_DESCRIPTION = 'Create documents with Apache OpenOffice (Windows)'
+WORKFLOW_NAME = 'OpenOfficeWriter'
+WORKFLOW_DESCRIPTION = 'Create documents with Apache OpenOffice Writer (Windows)'
 
 
 sleeptime = 2
