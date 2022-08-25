@@ -26,78 +26,71 @@ class DocumentManipulation(BaseWorkflow):
         self._create_spreadsheet()
 
     def insert_comment(self):
-        print("Inserting a comment")
-        pyautogui.hotkey('ctrl', 'alt', 'c')
-        pyautogui.typewrite(TextLorem().sentence())
-        pyautogui.press('esc')
+        pyautogui.hotkey('ctrl', 'alt', 'c') # insert comment
+        pyautogui.typewrite(TextLorem().sentence()) # type random sentence
+        pyautogui.press('esc') # finish commenting
         sleep(sleeptime)
-        print("...Done")
 
     def find(self):
-        pyautogui.hotkey('ctrl', 'f')
+        pyautogui.hotkey('ctrl', 'f') # open Find & Replace
         sleep(sleeptime)
-        pyautogui.typewrite(TextLorem()._word())
+        pyautogui.typewrite(TextLorem()._word()) # type random word
         sleep(sleeptime)
         pyautogui.press('enter')
         sleep(sleeptime)
-        pyautogui.hotkey('alt','y')
+        pyautogui.hotkey('alt','y') # close pop up box that may appear
         sleep(sleeptime)
-        pyautogui.hotkey('alt','c')
+        pyautogui.hotkey('alt','c') # close Find & Replace
         sleep(sleeptime)
-
 
 
     def new_spreadsheet(self):
-        # Open new spreadsheet in OpenOffice
-        os.startfile(openoffice_path)
+        os.startfile(openoffice_path) # start OpenOffice
         sleep(sleeptime)
-        pyautogui.press('s') 
+        pyautogui.press('s') # choose new spreadsheet
         sleep(sleeptime)
 
 
     def save_quit(self):
-        pyautogui.hotkey('ctrl', 's')
+        pyautogui.hotkey('ctrl', 's') # save
         sleep(sleeptime)
-        pyautogui.typewrite(TextLorem(wsep='-', srange=(1,3)).sentence()[:-1])
+        pyautogui.typewrite(TextLorem(wsep='-', srange=(1,3)).sentence()[:-1]) # type random file name
         sleep(sleeptime)
         pyautogui.press('enter') 
-        pyautogui.hotkey('alt','y')
+        pyautogui.hotkey('alt','y') # choose "yes" if a popup asks if you'd like to overwrite another file
         sleep(sleeptime)
-        pyautogui.hotkey('ctrl','q')
+        pyautogui.hotkey('ctrl','q') # quit OpenOffice
 
     def move_to_cell(self, cell_coordinate):
-        pyautogui.press('f5')
-        pyautogui.hotkey('ctrl','a')
-        pyautogui.write(str(cell_coordinate[0]))
-        pyautogui.press('tab')
-        pyautogui.write(str(cell_coordinate[1]))
+        pyautogui.press('f5') # open navigator
+        pyautogui.hotkey('ctrl','a') # select column value
+        pyautogui.write(str(cell_coordinate[0])) # enter new column value
+        pyautogui.press('tab') # select row value
+        pyautogui.write(str(cell_coordinate[1])) # enter new row value
         pyautogui.press('enter')
-        pyautogui.press('f5')
+        pyautogui.press('f5') # close navigator
 
     def insert_table(self):
         row_length = random.randint(3,10)
-        for i in range(0, row_length):
-            pyautogui.write(TextLorem()._word())
+        for i in range(0, row_length): # create header row for a table
+            pyautogui.write(TextLorem()._word()) # type a random word
             pyautogui.press('tab')
-        for j in range(0, random.randint(3,10)):
+        for j in range(0, random.randint(3,10)): 
             pyautogui.press('enter')
             for k in range(0, row_length):
-                pyautogui.write(str(random.randint(0,10000)))
+                pyautogui.write(str(random.randint(0,10000))) # type a random number
                 pyautogui.press('tab')
-
 
 
     def _create_spreadsheet(self):
         self.new_spreadsheet()
-        self.move_to_cell([random.choice('abcde'),random.randrange(6)])
+        self.move_to_cell([random.choice('abcde'),random.randrange(6)]) # move to random cell, given column & row parameters
         sleep(1)
         self.insert_table()
         sleep(1)
-        self.move_to_cell([random.choice('abcdefghijkl'),random.randrange(15)])
+        self.move_to_cell([random.choice('abcdefghijkl'),random.randrange(15)]) # move to random cell, given column & row parameters
         self.insert_comment()
         sleep(3)
-        # find()/
-
 
         self.save_quit()
 
