@@ -26,7 +26,7 @@ class DocumentManipulation(BaseWorkflow):
         self._create_document()
 
     def _create_document(self):
-        self.new_document()
+        self._new_document()
         # Type random paragrahs and sentences
         for i in range(0, random.randint(2,10)):
             random.choice([pyautogui.typewrite(TextLorem().paragraph()), pyautogui.typewrite(TextLorem().sentence())])
@@ -35,26 +35,26 @@ class DocumentManipulation(BaseWorkflow):
         # Randomly perform actions
         for i in range(0, random.randint(6,15)):
             random.choice([
-                self.save_pdf,
-                self.write_sentence,
-                self.write_paragraph,
-                self.copy_paste, 
-                self.insert_comment,
-                self.find,
-                self.delete_text,
-                self.format_text])()
+                self._save_pdf,
+                self._write_sentence,
+                self._write_paragraph,
+                self._copy_paste, 
+                self._insert_comment,
+                self._find,
+                self._delete_text,
+                self._format_text])()
             sleep(sleeptime)
         # Save and quit the document
         self.save_quit()
 
 
-    def insert_comment(self):
+    def _insert_comment(self):
         pyautogui.hotkey('ctrl', 'alt', 'c') # insert comment
         pyautogui.typewrite(TextLorem().sentence()) # type random sentence
         pyautogui.press('esc') # finish commenting
         sleep(sleeptime)
 
-    def find(self):
+    def _find(self):
         pyautogui.hotkey('ctrl', 'f') # open Find & Replace
         sleep(sleeptime)
         pyautogui.typewrite(TextLorem()._word()) # type random word
@@ -66,7 +66,7 @@ class DocumentManipulation(BaseWorkflow):
         pyautogui.hotkey('alt','c') # close Find & Replace
         sleep(sleeptime)
 
-    def copy_paste(self):
+    def _copy_paste(self):
         self.select_text()
         sleep(sleeptime)
         pyautogui.hotkey('ctrl', 'c') # copy to clipboard
@@ -80,7 +80,7 @@ class DocumentManipulation(BaseWorkflow):
         pyautogui.hotkey('ctrl', 'v') # paste from clipboard
         sleep(sleeptime)
 
-    def select_text(self):
+    def _select_text(self):
         selection_params = [
             ['ctrl'  , 'home'], # go to beginning of document
             ['shift' , 'left'], # move cursor & select to left
@@ -88,7 +88,7 @@ class DocumentManipulation(BaseWorkflow):
         ]
         pyautogui.hotkey(*random.choice(selection_params)) 
 
-    def format_text(self):
+    def _format_text(self):
         self.select_text()
         sleep(sleeptime)
         formatting_params = [
@@ -102,11 +102,11 @@ class DocumentManipulation(BaseWorkflow):
         pyautogui.hotkey(*random.choice(formatting_params))
         sleep(sleeptime)
 
-    def delete_text(self):
+    def _delete_text(self):
         pyautogui.hotkey('ctrl', 'shift', 'delete') # Delete text to beginning of line
         pyautogui.hotkey('ctrl', 'backspace') # Delete text to beginning of word 
 
-    def save_pdf(self):
+    def _save_pdf(self):
         # Export a pdf
         pyautogui.hotkey('alt','f') # select to File
         pyautogui.hotkey('alt','d') # select to Export as PDF
@@ -119,7 +119,7 @@ class DocumentManipulation(BaseWorkflow):
         pyautogui.hotkey('alt','y') # choose "yes" if a popup asks if you'd like to overwrite another file
 
 
-    def new_document(self):
+    def _new_document(self):
         # Open new document in OpenOffice
         os.startfile(openoffice_path) # open OpenOffice
         sleep(sleeptime)
@@ -128,7 +128,7 @@ class DocumentManipulation(BaseWorkflow):
         # pyautogui.hotkey('ctrl','shift', 'j') # full screen mode
 
 
-    def save_quit(self):
+    def _save_quit(self):
         pyautogui.hotkey('ctrl', 's') # save
         sleep(sleeptime)
         pyautogui.typewrite(TextLorem(wsep='-', srange=(1,3)).sentence()[:-1]) # type random file name
@@ -138,9 +138,9 @@ class DocumentManipulation(BaseWorkflow):
         sleep(sleeptime)
         pyautogui.hotkey('ctrl','q') # quit OpenOffice
 
-    def write_paragraph(self):
+    def _write_paragraph(self):
         pyautogui.typewrite(TextLorem().paragraph()), 
-    def write_sentence(self):
+    def _write_sentence(self):
         pyautogui.typewrite(TextLorem().sentence()), 
 
 
