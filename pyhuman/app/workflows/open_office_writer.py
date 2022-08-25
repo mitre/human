@@ -35,6 +35,7 @@ class DocumentManipulation(BaseWorkflow):
         # Randomly perform actions
         for i in range(0, random.randint(6,15)):
             random.choice([
+                self.save_pdf,
                 self.write_sentence,
                 self.write_paragraph,
                 self.copy_paste, 
@@ -102,10 +103,8 @@ class DocumentManipulation(BaseWorkflow):
         sleep(sleeptime)
 
     def delete_text(self):
-        print("Deleting")
         pyautogui.hotkey('ctrl', 'shift', 'delete') # Delete text to beginning of line
         pyautogui.hotkey('ctrl', 'backspace') # Delete text to beginning of word 
-        print("..done")
 
     def save_pdf(self):
         # Export a pdf
@@ -116,9 +115,8 @@ class DocumentManipulation(BaseWorkflow):
         pyautogui.typewrite(TextLorem(wsep='-', srange=(1,3)).sentence()[:-1])
         sleep(sleeptime)
         pyautogui.press('enter') 
-        pyautogui.hotkey('alt','y')
         sleep(sleeptime)
-        pyautogui.hotkey('ctrl','q')
+        pyautogui.hotkey('alt','y')
 
 
     def new_document(self):
