@@ -18,7 +18,7 @@ def load():
 
 class OpenOfficeWriter(BaseWorkflow):
 
-    def __init__(self, default_wait_time=DEFAULT_WAIT_TIME):
+    def __init__(self, default_wait_time=DEFAULT_WAIT_TIME, open_office_path=OPEN_OFFICE_PATH):
         super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION)
         self.default_wait_time = default_wait_time
 
@@ -121,7 +121,7 @@ class OpenOfficeWriter(BaseWorkflow):
 
     def _new_document(self):
         # Open new document in OpenOffice
-        os.startfile(OPEN_OFFICE_PATH) # open OpenOffice
+        os.startfile(self.open_office_path) # open OpenOffice
         sleep(self.default_wait_time)
         pyautogui.press('d') # choose document editing
         sleep(self.default_wait_time)

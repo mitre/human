@@ -18,7 +18,7 @@ def load():
 
 class OpenOfficeCalc(BaseWorkflow):
 
-    def __init__(self, default_wait_time=DEFAULT_WAIT_TIME):
+    def __init__(self, default_wait_time=DEFAULT_WAIT_TIME, open_office_path=OPEN_OFFICE_PATH):
         super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION)
         self.default_wait_time = default_wait_time
 
@@ -56,7 +56,7 @@ class OpenOfficeCalc(BaseWorkflow):
 
 
     def _new_spreadsheet(self):
-        os.startfile(OPEN_OFFICE_PATH) # start OpenOffice
+        os.startfile(self.open_office_calc) # start OpenOffice
         sleep(self.default_wait_time)
         pyautogui.press('s') # choose new spreadsheet
         sleep(self.default_wait_time)
