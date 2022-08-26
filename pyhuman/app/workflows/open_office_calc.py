@@ -1,26 +1,26 @@
-from ..utility.base_workflow import BaseWorkflow
-import lorem
-from lorem.text import TextLorem
 import os
-import pyautogui
-from time import sleep
 import random
+import pyautogui
+from lorem.text import TextLorem
+from time import sleep
+from ..utility.base_workflow import BaseWorkflow
 
 
 WORKFLOW_NAME = 'OpenOfficeCalc'
 WORKFLOW_DESCRIPTION = 'Create spreadsheets with Apache OpenOffice Calc (Windows)'
 
 
-sleeptime = 2
-openoffice_path = "C:\Program Files (x86)\OpenOffice 4\program\soffice"
+DEFAULT_WAIT_TIME = 2
+OPEN_OFFICE_PATH = "C:\Program Files (x86)\OpenOffice 4\program\soffice"
 
 def load():
-    return DocumentManipulation()
+    return OpenOfficeCalc()
 
-class DocumentManipulation(BaseWorkflow):
+class OpenOfficeCalc(BaseWorkflow):
 
-    def __init__(self):
+    def __init__(self, default_wait_time=DEFAULT_WAIT_TIME):
         super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION)
+        self.default_wait_time = default_wait_time
 
     def action(self, extra=None):
         self._create_spreadsheet()
@@ -40,36 +40,36 @@ class DocumentManipulation(BaseWorkflow):
         pyautogui.hotkey('ctrl', 'alt', 'c') # insert comment
         pyautogui.typewrite(TextLorem().sentence()) # type random sentence
         pyautogui.press('esc') # finish commenting
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
 
     def _find(self):
         pyautogui.hotkey('ctrl', 'f') # open Find & Replace
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.typewrite(TextLorem()._word()) # type random word
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.press('enter')
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.hotkey('alt','y') # close pop up box that may appear
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.hotkey('alt','c') # close Find & Replace
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
 
 
     def _new_spreadsheet(self):
-        os.startfile(openoffice_path) # start OpenOffice
-        sleep(sleeptime)
+        os.startfile(OPEN_OFFICE_PATH) # start OpenOffice
+        sleep(self.default_wait_time)
         pyautogui.press('s') # choose new spreadsheet
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
 
 
     def _save_quit(self):
         pyautogui.hotkey('ctrl', 's') # save
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.typewrite(TextLorem(wsep='-', srange=(1,3)).sentence()[:-1]) # type random file name
-        sleep(sleeptime)
-        pyautogui.press('enter') 
+        sleep(self.default_wait_time)
+        pyautogui.press('enter')
         pyautogui.hotkey('alt','y') # choose "yes" if a popup asks if you'd like to overwrite another file
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.hotkey('ctrl','q') # quit OpenOffice
 
     def _move_to_cell(self, cell_coordinate):
@@ -86,15 +86,8 @@ class DocumentManipulation(BaseWorkflow):
         for i in range(0, row_length): # create header row for a table
             pyautogui.write(TextLorem()._word()) # type a random word
             pyautogui.press('tab')
-        for j in range(0, random.randint(3,10)): 
+        for j in range(0, random.randint(3,10)):
             pyautogui.press('enter')
             for k in range(0, row_length):
                 pyautogui.write(str(random.randint(0,10000))) # type a random number
                 pyautogui.press('tab')
-
-
-
-
-
-
-

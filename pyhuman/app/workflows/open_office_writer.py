@@ -1,26 +1,26 @@
-from ..utility.base_workflow import BaseWorkflow
-import lorem
-from lorem.text import TextLorem
 import os
-import pyautogui
-from time import sleep
 import random
+import pyautogui
+from lorem.text import TextLorem
+from time import sleep
+from ..utility.base_workflow import BaseWorkflow
 
 
 WORKFLOW_NAME = 'OpenOfficeWriter'
 WORKFLOW_DESCRIPTION = 'Create documents with Apache OpenOffice Writer (Windows)'
 
 
-sleeptime = 2
-openoffice_path = "C:\Program Files (x86)\OpenOffice 4\program\soffice"
+DEFAULT_WAIT_TIME = 2
+OPEN_OFFICE_PATH = "C:\Program Files (x86)\OpenOffice 4\program\soffice"
 
 def load():
-    return DocumentManipulation()
+    return OpenOfficeWriter()
 
-class DocumentManipulation(BaseWorkflow):
+class OpenOfficeWriter(BaseWorkflow):
 
-    def __init__(self):
+    def __init__(self, default_wait_time=DEFAULT_WAIT_TIME):
         super().__init__(name=WORKFLOW_NAME, description=WORKFLOW_DESCRIPTION)
+        self.default_wait_time = default_wait_time
 
     def action(self, extra=None):
         self._create_document()
@@ -31,7 +31,7 @@ class DocumentManipulation(BaseWorkflow):
         for i in range(0, random.randint(2,10)):
             random.choice([pyautogui.typewrite(TextLorem().paragraph()), pyautogui.typewrite(TextLorem().sentence())])
             pyautogui.press('enter')
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         # Randomly perform actions
         for i in range(0, random.randint(6,15)):
             random.choice([
@@ -43,42 +43,42 @@ class DocumentManipulation(BaseWorkflow):
                 self._find,
                 self._delete_text,
                 self._format_text])()
-            sleep(sleeptime)
+            sleep(self.default_wait_time)
         # Save and quit the document
-        self.save_quit()
+        self._save_quit()
 
 
     def _insert_comment(self):
         pyautogui.hotkey('ctrl', 'alt', 'c') # insert comment
         pyautogui.typewrite(TextLorem().sentence()) # type random sentence
         pyautogui.press('esc') # finish commenting
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
 
     def _find(self):
         pyautogui.hotkey('ctrl', 'f') # open Find & Replace
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.typewrite(TextLorem()._word()) # type random word
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.press('enter') 
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.hotkey('alt','y') # close pop up box that may appear
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.hotkey('alt','c') # close Find & Replace
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
 
     def _copy_paste(self):
-        self.select_text()
-        sleep(sleeptime)
+        self._select_text()
+        sleep(self.default_wait_time)
         pyautogui.hotkey('ctrl', 'c') # copy to clipboard
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.press('backspace') # delete text
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.typewrite(TextLorem().paragraph()) # write text
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.press('enter') # insert new line
         pyautogui.press('enter') # insert new line
         pyautogui.hotkey('ctrl', 'v') # paste from clipboard
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
 
     def _select_text(self):
         selection_params = [
@@ -89,8 +89,8 @@ class DocumentManipulation(BaseWorkflow):
         pyautogui.hotkey(*random.choice(selection_params)) 
 
     def _format_text(self):
-        self.select_text()
-        sleep(sleeptime)
+        self._select_text()
+        sleep(self.default_wait_time)
         formatting_params = [
         ['ctrl','1'], # Apply heading 1 style
         ['ctrl','2'], # Apply heading 2 style
@@ -100,7 +100,7 @@ class DocumentManipulation(BaseWorkflow):
         ['ctrl','5'] # Set 1.5 line spacing
         ]
         pyautogui.hotkey(*random.choice(formatting_params))
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
 
     def _delete_text(self):
         pyautogui.hotkey('ctrl', 'shift', 'delete') # Delete text to beginning of line
@@ -113,29 +113,29 @@ class DocumentManipulation(BaseWorkflow):
         pyautogui.press('enter') # choose Export as PDF
         pyautogui.hotkey('alt','x') # choose Export
         pyautogui.typewrite(TextLorem(wsep='-', srange=(1,3)).sentence()[:-1]) # type random file name
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.press('enter') # press enter
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.hotkey('alt','y') # choose "yes" if a popup asks if you'd like to overwrite another file
 
 
     def _new_document(self):
         # Open new document in OpenOffice
-        os.startfile(openoffice_path) # open OpenOffice
-        sleep(sleeptime)
+        os.startfile(OPEN_OFFICE_PATH) # open OpenOffice
+        sleep(self.default_wait_time)
         pyautogui.press('d') # choose document editing
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         # pyautogui.hotkey('ctrl','shift', 'j') # full screen mode
 
 
     def _save_quit(self):
         pyautogui.hotkey('ctrl', 's') # save
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.typewrite(TextLorem(wsep='-', srange=(1,3)).sentence()[:-1]) # type random file name
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.press('enter') 
         pyautogui.hotkey('alt','y') # choose "yes" if a popup asks if you'd like to overwrite another file
-        sleep(sleeptime)
+        sleep(self.default_wait_time)
         pyautogui.hotkey('ctrl','q') # quit OpenOffice
 
     def _write_paragraph(self):
