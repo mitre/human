@@ -48,7 +48,6 @@ class OpenOfficeWriter(BaseWorkflow):
         # Save and quit the document
         self._save_quit()
 
-
     def _insert_comment(self):
         pyautogui.hotkey('ctrl', 'alt', 'c') # insert comment
         pyautogui.typewrite(TextLorem().sentence()) # type random sentence
@@ -119,7 +118,6 @@ class OpenOfficeWriter(BaseWorkflow):
         sleep(self.default_wait_time)
         pyautogui.hotkey('alt','y') # choose "yes" if a popup asks if you'd like to overwrite another file
 
-
     def _new_document(self):
         # Open new document in OpenOffice
         os.startfile(self.open_office_path) # open OpenOffice
@@ -127,7 +125,6 @@ class OpenOfficeWriter(BaseWorkflow):
         pyautogui.press('d') # choose document editing
         sleep(self.default_wait_time)
         # pyautogui.hotkey('ctrl','shift', 'j') # full screen mode
-
 
     def _save_quit(self):
         pyautogui.hotkey('ctrl', 's') # save

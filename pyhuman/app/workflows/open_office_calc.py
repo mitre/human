@@ -55,13 +55,11 @@ class OpenOfficeCalc(BaseWorkflow):
         pyautogui.hotkey('alt','c') # close Find & Replace
         sleep(self.default_wait_time)
 
-
     def _new_spreadsheet(self):
         os.startfile(self.open_office_path) # start OpenOffice
         sleep(self.default_wait_time)
         pyautogui.press('s') # choose new spreadsheet
         sleep(self.default_wait_time)
-
 
     def _save_quit(self):
         pyautogui.hotkey('ctrl', 's') # save
