@@ -135,13 +135,7 @@ class OpenOfficeWriter(BaseWorkflow):
         pyautogui.hotkey('ctrl','q') # quit OpenOffice
 
     def _write_paragraph(self):
-        pyautogui.typewrite(TextLorem().paragraph()), 
+        pyautogui.typewrite(TextLorem().paragraph())
+
     def _write_sentence(self):
-        pyautogui.typewrite(TextLorem().sentence()), 
-
-
-
-
-
-
-
+        pyautogui.typewrite(TextLorem().sentence())
