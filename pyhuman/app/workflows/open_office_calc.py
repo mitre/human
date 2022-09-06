@@ -41,18 +41,6 @@ class OpenOfficeCalc(BaseWorkflow):
         pyautogui.press('esc') # finish commenting
         sleep(self.default_wait_time)
 
-    def _find(self):
-        pyautogui.hotkey('ctrl', 'f') # open Find & Replace
-        sleep(self.default_wait_time)
-        pyautogui.typewrite(TextLorem()._word()) # type random word
-        sleep(self.default_wait_time)
-        pyautogui.press('enter')
-        sleep(self.default_wait_time)
-        pyautogui.hotkey('alt','y') # close pop up box that may appear
-        sleep(self.default_wait_time)
-        pyautogui.hotkey('alt','c') # close Find & Replace
-        sleep(self.default_wait_time)
-
     def _new_spreadsheet(self):
         os.startfile(self.open_office_path) # start OpenOffice
         sleep(self.default_wait_time)
