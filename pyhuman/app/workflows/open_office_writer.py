@@ -33,15 +33,14 @@ class OpenOfficeWriter(BaseWorkflow):
         sleep(self.default_wait_time)
         # Randomly perform actions
         for i in range(0, random.randint(6,15)):
-            random.choice([
-                self._save_pdf,
-                self._write_sentence,
-                self._write_paragraph,
-                self._copy_paste, 
-                self._insert_comment,
-                self._find,
-                self._delete_text,
-                self._format_text])()
+            random.choice([self._save_pdf,
+                           self._write_sentence,
+                           self._write_paragraph,
+                           self._copy_paste, 
+                           self._insert_comment,
+                           self._find,
+                           self._delete_text,
+                           self._format_text])()
             sleep(self.default_wait_time)
         # Save and quit the document
         self._save_quit()
@@ -89,14 +88,12 @@ class OpenOfficeWriter(BaseWorkflow):
     def _format_text(self):
         self._select_text()
         sleep(self.default_wait_time)
-        formatting_params = [
-        ['ctrl','1'], # Apply heading 1 style
-        ['ctrl','2'], # Apply heading 2 style
-        ['ctrl','3'], # Apply heading 3 style
-        ['ctrl','d'], # Double underline
-        ['ctrl','e'], # Center
-        ['ctrl','5'] # Set 1.5 line spacing
-        ]
+        formatting_params = [['ctrl','1'], # Apply heading 1 style
+                             ['ctrl','2'], # Apply heading 2 style
+                             ['ctrl','3'], # Apply heading 3 style
+                             ['ctrl','d'], # Double underline
+                             ['ctrl','e'], # Center
+                             ['ctrl','5']] # Set 1.5 line spacing
         pyautogui.hotkey(*random.choice(formatting_params))
         sleep(self.default_wait_time)
 
