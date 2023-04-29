@@ -59,6 +59,7 @@
                             <td>
                                 <select id="base-platform">
                                     <option disabled="disabled" selected="">Select target OS</option>
+                                    <option value="freebsd">FreeBSD</option>
                                     <option value="darwin">MacOS</option>
                                     <option value="linux">Linux</option>
                                     <option value="windows-psh">Windows (PowerShell)</option>
@@ -257,6 +258,12 @@
                     ' && virtualenv -p python3 \''+humanName+'\' && \''+humanName+'/bin/pip\' install -r \''+humanName+'/requirements.txt\' && \''+humanName+'/bin/python\' \''+humanName+'/human.py\' --clustersize '+taskCount+' ' +
                     '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
                 break;
+            case "freebsd":
+                baseHuman = 'curl -sk -o \''+humanName+'.tar.gz\' -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir \''+humanName+'\' && tar -C \''+humanName+'\' -zxvf \''+humanName+'.tar.gz\' ' +
+                    ' && virtualenv -p python3.9 \''+humanName+'\' && \''+humanName+'/bin/pip\' install -r \''+humanName+'/requirements.txt\' && \''+humanName+'/bin/python\' \''+humanName+'/human.py\' --clustersize '+taskCount+' ' +
+                    '--taskinterval '+taskInterval+' --taskgroupinterval '+taskClusterInterval+' --extra '+extra;
+                break;
+         
             case "linux":
                 baseHuman = 'curl -sk -o \''+humanName+'.tar.gz\' -X POST -H \'file:'+humanName+'.tar.gz\' '+http+'/file/download 2>&1 && mkdir \''+humanName+'\' && tar -C \''+humanName+'\' -zxvf \''+humanName+'.tar.gz\' ' +
                     ' && virtualenv -p python3 \''+humanName+'\' && \''+humanName+'/bin/pip\' install -r \''+humanName+'/requirements.txt\' && \''+humanName+'/bin/python\' \''+humanName+'/human.py\' --clustersize '+taskCount+' ' +
@@ -296,6 +303,10 @@
                     command = command.replace(/\\/g, '\\\\');
                     command = command.replace(/"/g, '\\\"');
                     break;
+                case "freebsd":
+                    command = command.replace(/\\/g, '\\\\');
+                    command = command.replace(/"/g, '\\\"');
+                    break;           
                 case "linux":
                     command = command.replace(/\\/g, '\\\\');
                     command = command.replace(/"/g, '\\\"');
