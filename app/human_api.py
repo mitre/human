@@ -18,6 +18,12 @@ class HumanApi:
         return dict(workflows=[w.display for w in await self.data_svc.locate('workflows')],
                     humans=[h.display for h in await self.data_svc.locate('humans')])
 
+    async def human_workflows(self, request):
+        return web.json_response([w.display for w in await self.data_svc.locate('workflows')])
+
+    async def human_humans(self, request):
+        return web.json_response([h.display for h in await self.data_svc.locate('humans')])
+
     async def rest_api(self, request):
         try:
             data = dict(await request.json())
