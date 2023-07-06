@@ -17,4 +17,6 @@ async def enable(services):
     human_api = HumanApi(services=services, human_svc=human_svc)
     app.router.add_route('GET', '/plugin/human/gui', human_api.splash)
     app.router.add_route('*', '/plugin/human/api', human_api.rest_api)
+    app.router.add_route('GET', '/plugin/human/workflows', human_api.human_workflows)
+    app.router.add_route('GET', '/plugin/human/humans', human_api.human_humans)
     app.router.add_static('/human', 'plugins/human/static', append_version=True)
