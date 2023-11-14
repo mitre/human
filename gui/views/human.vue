@@ -1,18 +1,22 @@
 <script setup>
 import { inject, ref, onMounted, computed } from "vue";
 import { storeToRefs } from "pinia";
-import { useCoreStore } from "@/stores/coreStore.js";
 
-const coreStore = useCoreStore();
 const $api = inject("$api");
 
-onMounted(async () => {
+onMounted(async () => {});
 
-});
 </script>
+
+<style scoped>
+@import "/human/css/human.css";
+@import "/gui/css/shared.css";
+</style>
+
 
 <script>
 export default {
+  inject: ["$api"],
   data() {
     return {
       workflows: null,
@@ -40,10 +44,10 @@ export default {
     initHuman() {
       this.serverIp = `${window.location.protocol}//${window.location.hostname}:${window.location.port}`;
 
-      this.coreStore.apiV2("GET", "plugin/human/workflows")
+      this.$api.get("plugin/human/workflows")
         .then((workflows) => {
           this.workflows = workflows;
-          return this.coreStore.apiV2("GET", "plugin/human/humans");
+          return this.$api.get("plugin/human/humans");
         })
         .then((humans) => {
           this.humans = humans;
@@ -81,7 +85,7 @@ export default {
         extra: this.commands,
       };
 
-      this.coreStore.apiV2("POST", "plugin/human/api", payload)
+      this.$api.post("plugin/human/api", payload)
         .then((response) => {
           this.humans.push(response);
           this.selectedHuman = this.humans.length - 1;
@@ -113,12 +117,58 @@ export default {
       switch (this.humans[this.selectedHuman].platform) {
         case "darwin":
         case "linux":
-          this.commandBlock = 
-            `curl -sk -o '${this.humans[this.selectedHuman].name}.tar.gz' -X POST -H 'file:${this.humans[this.selectedHuman].name}.tar.gz' ${this.serverIp}/file/download 2>&1 && mkdir '${this.humans[this.selectedHuman].name}' && tar -C '${this.humans[this.selectedHuman].name}' -zxvf '${this.humans[this.selectedHuman].name}.tar.gz' && virtualenv -p python3 '${this.humans[this.selectedHuman].name}' && '${this.humans[this.selectedHuman].name}/bin/pip' install -r '${this.humans[this.selectedHuman].name}/requirements.txt' && '${this.humans[this.selectedHuman].name}/bin/python' '${this.humans[this.selectedHuman].name}/human.py' --clustersize ${this.humans[this.selectedHuman].tasks_per_cluster} --taskinterval ${this.humans[this.selectedHuman].task_interval} --taskgroupinterval ${this.humans[this.selectedHuman].task_cluster_interval} --extra ${extra}`;
+          this.commandBlock = `curl -sk -o '${
+            this.humans[this.selectedHuman].name
+          }.tar.gz' -X POST -H 'file:${
+            this.humans[this.selectedHuman].name
+          }.tar.gz' ${this.serverIp}/file/download 2>&1 && mkdir '${
+            this.humans[this.selectedHuman].name
+          }' && tar -C '${this.humans[this.selectedHuman].name}' -zxvf '${
+            this.humans[this.selectedHuman].name
+          }.tar.gz' && virtualenv -p python3 '${
+            this.humans[this.selectedHuman].name
+          }' && '${this.humans[this.selectedHuman].name}/bin/pip' install -r '${
+            this.humans[this.selectedHuman].name
+          }/requirements.txt' && '${
+            this.humans[this.selectedHuman].name
+          }/bin/python' '${
+            this.humans[this.selectedHuman].name
+          }/human.py' --clustersize ${
+            this.humans[this.selectedHuman].tasks_per_cluster
+          } --taskinterval ${
+            this.humans[this.selectedHuman].task_interval
+          } --taskgroupinterval ${
+            this.humans[this.selectedHuman].task_cluster_interval
+          } --extra ${extra}`;
           break;
         case "windows-psh":
-          this.commandBlock = 
-            `$server='${this.serverIp}'; $url="$server/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("file","${this.humans[this.selectedHuman].name}.zip"); $wc.DownloadFile($url, "$pwd\\${this.humans[this.selectedHuman].name}.zip"); Expand-Archive "${this.humans[this.selectedHuman].name}.zip" -DestinationPath "${this.humans[this.selectedHuman].name}" -Force; python.exe -m venv "${this.humans[this.selectedHuman].name}"; Start-Process -FilePath ".\\${this.humans[this.selectedHuman].name}\\Scripts\\pip.exe" -ArgumentList "install -r ${this.humans[this.selectedHuman].name}\\requirements.txt" -Wait; Start-Process -FilePath ".\\\\${this.humans[this.selectedHuman].name}\\\\Scripts\\\\python.exe" -ArgumentList "${this.humans[this.selectedHuman].name}/human.py' --clustersize ${this.humans[this.selectedHuman].tasks_per_cluster} --taskinterval ${this.humans[this.selectedHuman].task_interval} --taskgroupinterval ${this.humans[this.selectedHuman].task_cluster_interval} --extra ${extra}"`;
+          this.commandBlock = `$server='${
+            this.serverIp
+          }'; $url="$server/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("file","${
+            this.humans[this.selectedHuman].name
+          }.zip"); $wc.DownloadFile($url, "$pwd\\${
+            this.humans[this.selectedHuman].name
+          }.zip"); Expand-Archive "${
+            this.humans[this.selectedHuman].name
+          }.zip" -DestinationPath "${
+            this.humans[this.selectedHuman].name
+          }" -Force; python.exe -m venv "${
+            this.humans[this.selectedHuman].name
+          }"; Start-Process -FilePath ".\\${
+            this.humans[this.selectedHuman].name
+          }\\Scripts\\pip.exe" -ArgumentList "install -r ${
+            this.humans[this.selectedHuman].name
+          }\\requirements.txt" -Wait; Start-Process -FilePath ".\\\\${
+            this.humans[this.selectedHuman].name
+          }\\\\Scripts\\\\python.exe" -ArgumentList "${
+            this.humans[this.selectedHuman].name
+          }/human.py' --clustersize ${
+            this.humans[this.selectedHuman].tasks_per_cluster
+          } --taskinterval ${
+            this.humans[this.selectedHuman].task_interval
+          } --taskgroupinterval ${
+            this.humans[this.selectedHuman].task_cluster_interval
+          } --extra ${extra}"`;
           break;
       }
     },
@@ -141,8 +191,6 @@ export default {
 </script>
 
 <template lang="pug">
-//- link(rel="stylesheet", href="human/static/css/human.css")
-
 div
   #human-section-1.section-profile
     .row
@@ -270,114 +318,114 @@ div
 
 <style>
 :root {
-    --default-font: 'Veranda', sans-serif;
-    --theme-color: white;
-    --primary-background: black;
-    --secondary-background: #1e1e1e;
-    --section-background: #1e1e1e;
-    --font-color: white;
-    --invert-percentage: 100%;
-    --secondary-font-color: firebrick;
+  --default-font: "Veranda", sans-serif;
+  --theme-color: white;
+  --primary-background: black;
+  --secondary-background: #1e1e1e;
+  --section-background: #1e1e1e;
+  --font-color: white;
+  --invert-percentage: 100%;
+  --secondary-font-color: firebrick;
 }
 
 .row .row-interior {
-    margin: 0;
-    padding: 0;
-    border: none;
-    background: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
 }
 .column .column-interior {
-    background-color: var(--primary-background);
-    padding: 25px;
-    border-radius: 25px;
-    margin-bottom: 0;
-    margin-top: 0;
+  background-color: var(--primary-background);
+  padding: 25px;
+  border-radius: 25px;
+  margin-bottom: 0;
+  margin-top: 0;
 }
 
 .human-box h4 {
-    font-size:20px;
-    text-align: left;
+  font-size: 20px;
+  text-align: left;
 }
 
 .human-basic hr {
-    opacity: .25;
+  opacity: 0.25;
 }
 
 .human-box hr {
-    margin: 30px 0;
+  margin: 30px 0;
 }
 
 .human-box table{
-    width: 100%;
+  width: 100%;
 }
 
 .human-box table p {
-    font-family: var(--default-font);
-    font-size: 14px;
-    font-weight: 700;
+  font-family: var(--default-font);
+  font-size: 14px;
+  font-weight: 700;
 }
-.human-box input[type='text'] {
-    width: 100%;
-    margin-top: 0;
+.human-box input[type="text"] {
+  width: 100%;
+  margin-top: 0;
 }
 .human-box select {
-    width: 100%;
+  width: 100%;
 }
 
 .human-box ul {
-    padding-inline-start: 20px;
+  padding-inline-start: 20px;
 }
-.human-box input[type='number'] {
-    position: relative;
-    width: 50px;
-    padding: 0;
-    margin: 0;
+.human-box input[type="number"] {
+  position: relative;
+  width: 50px;
+  padding: 0;
+  margin: 0;
 }
 
-.human-box input[type='range'] ::before {
-    display:none;
+.human-box input[type="range"] ::before {
+  display:none;
 }
 
 .human-header-list {
-    list-style-position: inside;
-    text-align: center;
-    display: inline-block;
+  list-style-position: inside;
+  text-align: center;
+  display: inline-block;
 }
 .install-container {
-    position: relative;
+  position: relative;
 }
 .install-container .background-text {
-    position: absolute;
-    color: #f1f1f1;
-    font-size: 40px;
-    bottom: 10px;
-    opacity: 30%;
+  position: absolute;
+  color: #f1f1f1;
+  font-size: 40px;
+  bottom: 10px;
+  opacity: 30%;
 }
 
 .install-container span {
-    font-size: 14px;
-    line-height: 22px;
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .duk-table-icon img {
-    margin: 0;
+  margin: 0;
 }
 
 #command-button {
-    display: inline-block;
-    background-color: var(--primary-background);
-    color: var(--font-color);
-    height: 25px;
-    width: 50%;
-    border: none;
-    margin: 5px;
-    cursor: pointer;
+  display: inline-block;
+  background-color: var(--primary-background);
+  color: var(--font-color);
+  height: 25px;
+  width: 50%;
+  border: none;
+  margin: 5px;
+  cursor: pointer;
 }
 
 .delete-command{
-    flex:10%;
-    color:red;
-    cursor:pointer;
-    font-size:22px;
+  flex:10%;
+  color:red;
+  cursor:pointer;
+  font-size:22px;
 }
 </style>
