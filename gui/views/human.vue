@@ -5,14 +5,166 @@ import { storeToRefs } from "pinia";
 const $api = inject("$api");
 
 onMounted(async () => {});
-
 </script>
 
 <style scoped>
-@import "../../static/css/human.css";
-@import "../../../../static/css/shared.css";
-</style>
+.section-profile ul {
+  list-style-type: none;
+}
 
+.section-profile li {
+  text-align: left;
+}
+
+.row {
+  text-align: center;
+  padding: 25px;
+  border-radius: 25px;
+  width: 95%;
+  display: flex;
+  position: relative;
+  border: 2px solid var(--navbar-color);
+}
+
+.transparent-row {
+  margin-top: 50px;
+  text-align: center;
+  background-color: transparent;
+  background-size: cover;
+  padding: 25px;
+  width: 95%;
+  display: flex;
+  position: relative;
+}
+
+.inner-row {
+  border: none;
+}
+
+.row-simple {
+  width: 95%;
+  display: flex;
+  position: relative;
+}
+
+.column {
+  flex: 50%;
+  color: var(--font-color);
+  margin: 30px;
+  max-width: 100%;
+}
+:root {
+  --default-font: "Veranda", sans-serif;
+  --theme-color: white;
+  --primary-background: black;
+  --secondary-background: #1e1e1e;
+  --section-background: #1e1e1e;
+  --font-color: white;
+  --invert-percentage: 100%;
+  --secondary-font-color: firebrick;
+}
+
+.row .row-interior {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+}
+.column .column-interior {
+  background-color: black;
+  padding: 25px;
+  border-radius: 25px;
+  margin-bottom: 0;
+  margin-top: 0;
+}
+
+.human-box h4 {
+  font-size: 20px;
+  text-align: left;
+}
+
+.human-basic hr {
+  opacity: 0.25;
+}
+
+.human-box hr {
+  margin: 30px 0;
+}
+
+.human-box table {
+  width: 100%;
+}
+
+.human-box table p {
+  font-family: var(--default-font);
+  font-size: 14px;
+  font-weight: 700;
+}
+.human-box input[type="text"] {
+  width: 100%;
+  margin-top: 0;
+}
+.human-box select {
+  width: 100%;
+}
+
+.human-box ul {
+  padding-inline-start: 20px;
+}
+.human-box input[type="number"] {
+  position: relative;
+  width: 50px;
+  padding: 0;
+  margin: 0;
+}
+
+.human-box input[type="range"] ::before {
+  display: none;
+}
+
+.human-header-list {
+  list-style-position: inside;
+  text-align: center;
+  display: inline-block;
+}
+.install-container {
+  position: relative;
+}
+.install-container .background-text {
+  position: absolute;
+  color: #f1f1f1;
+  font-size: 40px;
+  bottom: 10px;
+  opacity: 30%;
+}
+
+.install-container span {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.duk-table-icon img {
+  margin: 0;
+}
+
+#command-button {
+  display: inline-block;
+  background-color: black;
+  color: var(--font-color);
+  height: 25px;
+  width: 50%;
+  border: none;
+  margin: 5px;
+  cursor: pointer;
+}
+
+.delete-command {
+  flex: 10%;
+  color: red;
+  cursor: pointer;
+  font-size: 22px;
+}
+</style>
 
 <script>
 import { toast } from "bulma-toast";
@@ -46,10 +198,11 @@ export default {
     initHuman() {
       this.serverIp = `${window.location.protocol}//${window.location.hostname}:${window.location.port}`;
 
-      this.$api.get("plugin/human/workflows")
+      this.$api
+        .get("/plugin/human/workflows")
         .then((workflows) => {
           this.workflows = workflows.data;
-          return this.$api.get("plugin/human/humans");
+          return this.$api.get("/plugin/human/humans");
         })
         .then((humans) => {
           this.humans = humans.data;
@@ -68,39 +221,39 @@ export default {
     },
     generateHuman2() {
       if (!this.humanName) {
-          toast({
-            message: "Please enter a name for the human",
-            position: "bottom-right",
-            type: "is-warning",
-            dismissible: true,
-            pauseOnHover: true,
-            duration: 2000,
-          });
+        toast({
+          message: "Please enter a name for the human",
+          position: "bottom-right",
+          type: "is-warning",
+          dismissible: true,
+          pauseOnHover: true,
+          duration: 2000,
+        });
         return;
       }
 
       const validPlatforms = ["linux", "windows-psh", "darwin"];
       if (!validPlatforms.includes(this.selectedPlatform)) {
-          toast({
-            message: "Please select a valid platform",
-            position: "bottom-right",
-            type: "is-warning",
-            dismissible: true,
-            pauseOnHover: true,
-            duration: 2000,
-          });
+        toast({
+          message: "Please select a valid platform",
+          position: "bottom-right",
+          type: "is-warning",
+          dismissible: true,
+          pauseOnHover: true,
+          duration: 2000,
+        });
         return;
       }
 
       if (this.selectedWorkflows.length === 0) {
-          toast({
-            message: "Please select at least one workflow",
-            position: "bottom-right",
-            type: "is-warning",
-            dismissible: true,
-            pauseOnHover: true,
-            duration: 2000,
-          });
+        toast({
+          message: "Please select at least one workflow",
+          position: "bottom-right",
+          type: "is-warning",
+          dismissible: true,
+          pauseOnHover: true,
+          duration: 2000,
+        });
         return;
       }
 
@@ -115,7 +268,8 @@ export default {
         extra: this.commands,
       };
 
-      this.$api.post("plugin/human/api", payload)
+      this.$api
+        .post("/plugin/human/api", payload)
         .then((response) => {
           this.humans.push(response.data);
           this.selectedHuman = this.humans.length - 1;
@@ -146,14 +300,14 @@ export default {
     },
     copyCommand() {
       navigator.clipboard.writeText(this.commandBlock).then(() => {
-          toast({
-            message: "Copied to clipboard",
-            position: "bottom-right",
-            type: "is-success",
-            dismissible: true,
-            pauseOnHover: true,
-            duration: 2000,
-          });
+        toast({
+          message: "Copied to clipboard",
+          position: "bottom-right",
+          type: "is-success",
+          dismissible: true,
+          pauseOnHover: true,
+          duration: 2000,
+        });
       });
     },
     renderCommandBlock() {
@@ -312,8 +466,6 @@ div
               tr
                 td
                   p Task Sleep Interval
-                td.duk-icon.duk-table-icon
-                  img#duk-task-sleep-interval(src="/gui/img/duk.png")
                 td
                   div
                       input(v-model="sleepInterval", class="queueOption", type="range", min="5", max="50", id="human-task-interval", name="human-task-interval")
@@ -322,8 +474,6 @@ div
               tr
                 td
                   p Task Cluster Sleep Interval
-                td.duk-icon.duk-table-icon
-                  img#duk-cluster-sleep-interval(src="/gui/img/duk.png")
                 td
                   input(v-model="clusterSleepInterval", class="queueOption", type="range", min="5", max="1000", id="human-cluster-interval", name="human-cluster-interval")
                 td
@@ -331,8 +481,6 @@ div
               tr
                 td
                   p Tasks per Cluster
-                td.duk-icon.duk-table-icon
-                  img#duk-task-per-cluster(src="/gui/img/duk.png")
                 td
                   input(v-model="tasksPerCluster", class="queueOption", type="range", min="1", max="20", id="human-task-count", name="human-task-count")
                 td
