@@ -15,6 +15,8 @@ onMounted(async () => {});
 
 
 <script>
+import { toast } from "bulma-toast";
+
 export default {
   inject: ["$api"],
   data() {
@@ -46,31 +48,59 @@ export default {
 
       this.$api.get("plugin/human/workflows")
         .then((workflows) => {
-          this.workflows = workflows;
+          this.workflows = workflows.data;
           return this.$api.get("plugin/human/humans");
         })
         .then((humans) => {
-          this.humans = humans;
+          this.humans = humans.data;
         })
         .catch((error) => {
           console.error(error);
-          this.toast("Error loading workflows", false);
+          toast({
+            message: "Error loading workflows",
+            position: "bottom-right",
+            type: "is-warning",
+            dismissible: true,
+            pauseOnHover: true,
+            duration: 2000,
+          });
         });
     },
     generateHuman2() {
       if (!this.humanName) {
-        this.toast("Please enter a name for your human", false);
+          toast({
+            message: "Please enter a name for the human",
+            position: "bottom-right",
+            type: "is-warning",
+            dismissible: true,
+            pauseOnHover: true,
+            duration: 2000,
+          });
         return;
       }
 
       const validPlatforms = ["linux", "windows-psh", "darwin"];
       if (!validPlatforms.includes(this.selectedPlatform)) {
-        this.toast("Please select a valid platform", false);
+          toast({
+            message: "Please select a valid platform",
+            position: "bottom-right",
+            type: "is-warning",
+            dismissible: true,
+            pauseOnHover: true,
+            duration: 2000,
+          });
         return;
       }
 
       if (this.selectedWorkflows.length === 0) {
-        this.toast("Please select at least one workflow", false);
+          toast({
+            message: "Please select at least one workflow",
+            position: "bottom-right",
+            type: "is-warning",
+            dismissible: true,
+            pauseOnHover: true,
+            duration: 2000,
+          });
         return;
       }
 
@@ -87,22 +117,43 @@ export default {
 
       this.$api.post("plugin/human/api", payload)
         .then((response) => {
-          this.humans.push(response);
+          this.humans.push(response.data);
           this.selectedHuman = this.humans.length - 1;
           this.humanName = "";
           this.selectedPlatform = "";
           this.selectedWorkflows = [];
           this.commands = [];
-          this.toast("Human created", true);
+          toast({
+            message: "Human created",
+            position: "bottom-right",
+            type: "is-success",
+            dismissible: true,
+            pauseOnHover: true,
+            duration: 2000,
+          });
         })
         .catch((error) => {
           console.error(error);
-          this.toast("Error creating human", false);
+          toast({
+            message: "Error creating human",
+            position: "bottom-right",
+            type: "is-warning",
+            dismissible: true,
+            pauseOnHover: true,
+            duration: 2000,
+          });
         });
     },
     copyCommand() {
       navigator.clipboard.writeText(this.commandBlock).then(() => {
-        this.toast("Copied to clipboard", true);
+          toast({
+            message: "Copied to clipboard",
+            position: "bottom-right",
+            type: "is-success",
+            dismissible: true,
+            pauseOnHover: true,
+            duration: 2000,
+          });
       });
     },
     renderCommandBlock() {
@@ -196,7 +247,7 @@ div
     .row
       .column.section-border(style="flex: 25%; text-align: left; padding: 15px")
         h1(style="font-size: 70px; margin-top: -20px") Human
-        h2(style="margin-top: -55px") emulate human behavior
+        h2 emulate human behavior
         p This plugin allows you to design a human that will emulate user behavior on an endpoint. Use the following instructions to build and deploy your own human.
         br
       .column(style="flex: 75%; margin-right: -25px; align-items: stretch; display: flex;")
@@ -222,7 +273,7 @@ div
       .topright.duk-icon
       .column.section-border(style="flex: 25%; text-align: left; padding: 15px")
         h1#human-name-header(style="font-size: 70px; margin-top: -20px") {{ humans[selectedHuman] ? humans[selectedHuman].name : 'Name...' }}
-        h2(style="margin-top: -55px") build your human
+        h2 build your human
         p Design and generate your human here, or select a pre-existing human to deploy. Use the download command to install and start your human.
         br
       .column(style="flex: 75%; text-align: left; margin-right: -25px;")
@@ -244,10 +295,9 @@ div
             hr
             h4 Select your human's behaviors:
             ul#human-tasks
-              template(v-for="workflow in workflows")
-                li
-                  input(type="checkbox", :value="workflow.name", v-model="selectedWorkflows")
-                  span {{ workflow.description }}
+              li(v-for="workflow in workflows" :key="workflow.name")
+                input(type="checkbox", :value="workflow.name", v-model="selectedWorkflows")
+                span {{ workflow.description }}
             hr
             h4 Custom Commands:
             button#append-command.command-button.atomic-button(style="width: 30%; background-color: green") Add Command
@@ -266,7 +316,7 @@ div
                   img#duk-task-sleep-interval(src="/gui/img/duk.png")
                 td
                   div
-                      input(v-model="sleepInterval", class="queueOption slider", type="range", min="5", max="50", id="human-task-interval", name="human-task-interval")
+                      input(v-model="sleepInterval", class="queueOption", type="range", min="5", max="50", id="human-task-interval", name="human-task-interval")
                 td
                   input(v-model="sleepInterval", type="number", id="human-task-interval-text")
               tr
@@ -275,7 +325,7 @@ div
                 td.duk-icon.duk-table-icon
                   img#duk-cluster-sleep-interval(src="/gui/img/duk.png")
                 td
-                  input(v-model="clusterSleepInterval", class="queueOption slider", type="range", min="5", max="1000", id="human-cluster-interval", name="human-cluster-interval")
+                  input(v-model="clusterSleepInterval", class="queueOption", type="range", min="5", max="1000", id="human-cluster-interval", name="human-cluster-interval")
                 td
                   input(v-model="clusterSleepInterval", type="number", id="human-cluster-interval-text")
               tr
@@ -284,7 +334,7 @@ div
                 td.duk-icon.duk-table-icon
                   img#duk-task-per-cluster(src="/gui/img/duk.png")
                 td
-                  input(v-model="tasksPerCluster", class="queueOption slider", type="range", min="1", max="20", id="human-task-count", name="human-task-count")
+                  input(v-model="tasksPerCluster", class="queueOption", type="range", min="1", max="20", id="human-task-count", name="human-task-count")
                 td
                   input(v-model="tasksPerCluster", type="number", id="human-task-count-text")
             button#generateLayer.button-success(type="button", v-on:click="generateHuman2()") Generate Human
@@ -302,7 +352,7 @@ div
                   p Select existing human:
                 td
                   select(v-model="selectedHuman", style="width: 100%; margin-left: 0")
-                    option(value="", disabled) Select existing human...
+                    option(value=-1, disabled) Select existing human...
                     template(v-for="(h, index) in humans")
                       option(:value="index", :id="'human-' + h.name") {{ h.name }}
             hr
