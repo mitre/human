@@ -492,7 +492,7 @@ div
             table
               tr
                 td
-                  p CALDERA Server IP:
+                  p Caldera Server IP:
                 td
                   input(v-model="serverIp", id="server-ip", type="text", placeholder="http://localhost:3000")
               tr
