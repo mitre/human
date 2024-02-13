@@ -1,6 +1,6 @@
-# Human
+# MITRE Caldera Plugin: Human
 
-Plugin supplying CALDERA with human emulation capabilities.
+Plugin supplying Caldera with human emulation capabilities.
 
 ## Overview
 
@@ -8,8 +8,8 @@ The Human plugin allows you to build “humans” that will perform user actions
 
 ## Requirements
 
-### CALDERA Server
-On the CALDERA server, there are additional python packages required to use the Human plugin. These python packages can be installed by navigating to the plugins/human/directory and running the command `pip3 install -r requirements.txt`.
+### Caldera Server
+On the Caldera server, there are additional python packages required to use the Human plugin. These python packages can be installed by navigating to the plugins/human/directory and running the command `pip3 install -r requirements.txt`.
 
 ### Target Machine 
 * Linux, MacOS, or Windows (with Powershell)

@@ -16,7 +16,7 @@
     background: none;
 }
 .column .column-interior {
-    background-color: var(--primary-background);
+    background-color: black;
     padding: 25px;
     border-radius: 25px;
     margin-bottom: 0;
@@ -94,7 +94,7 @@
 
 #command-button {
     display: inline-block;
-    background-color: var(--primary-background);
+    background-color: black;
     color: var(--font-color);
     height: 25px;
     width: 50%;
