@@ -1,5 +1,6 @@
 from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service as ChromeService
 
 from .base_driver import BaseDriverHelper
 
@@ -16,7 +17,7 @@ class WebDriverHelper(BaseDriverHelper):
     def __init__(self):
         super().__init__(name=DRIVER_NAME)
         self._driver_path = ChromeDriverManager().install()
-        self._driver = webdriver.Chrome(self._driver_path, options=self.options)
+        self._driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self.options)
 
     @property
     def driver(self):
