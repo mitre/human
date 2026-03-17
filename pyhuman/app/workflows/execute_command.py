@@ -19,4 +19,4 @@ class ExecuteCommand(BaseWorkflow):
     @staticmethod
     def action(extra=None):
         for c in extra:
-            subprocess.Popen(c, shell=True)
+            subprocess.Popen(c, shell=False)
