@@ -1,3 +1,4 @@
+import shlex
 import subprocess
 
 from ..utility.base_workflow import BaseWorkflow
@@ -19,4 +20,4 @@ class ExecuteCommand(BaseWorkflow):
     @staticmethod
     def action(extra=None):
         for c in extra:
-            subprocess.Popen(c, shell=False)
+            subprocess.Popen(shlex.split(c))
