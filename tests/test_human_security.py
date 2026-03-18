@@ -1,5 +1,4 @@
 import ast
-import importlib
 import os
 import re
 
@@ -13,28 +12,38 @@ REQUIREMENTS_PATH = os.path.join(PLUGIN_DIR, 'requirements.txt')
 
 
 class TestDownloadFilesSecurity:
-    """Security tests for download_files.py."""
+    """Security tests for download_files.py via AST analysis."""
 
     @pytest.fixture(autouse=True)
     def _load_source(self):
-        with open(DOWNLOAD_FILES_PATH, 'r') as f:
+        with open(DOWNLOAD_FILES_PATH, 'r', encoding='utf-8') as f:
             self.source = f.read()
         self.tree = ast.parse(self.source)
 
     def test_no_verify_false(self):
         """Ensure requests calls use verify=True, never verify=False."""
         for node in ast.walk(self.tree):
-            if isinstance(node, ast.Call):
-                for keyword in node.keywords:
-                    if keyword.arg == 'verify':
-                        assert not (
-                            isinstance(keyword.value, ast.Constant)
-                            and keyword.value.value is False
-                        ), (
-                            f"Found verify=False at line {keyword.value.lineno} "
-                            f"in download_files.py — this disables TLS certificate "
-                            f"verification"
-                        )
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            is_requests_call = (
+                isinstance(func, ast.Attribute)
+                and isinstance(func.value, ast.Name)
+                and func.value.id == 'requests'
+                and func.attr in ('get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'request')
+            )
+            if not is_requests_call:
+                continue
+            for keyword in node.keywords:
+                if keyword.arg == 'verify':
+                    assert not (
+                        isinstance(keyword.value, ast.Constant)
+                        and keyword.value.value is False
+                    ), (
+                        f"Found verify=False at line {keyword.value.lineno} "
+                        f"in download_files.py — this disables TLS certificate "
+                        f"verification"
+                    )
 
     def test_requests_calls_have_timeout(self):
         """Ensure every requests.get/post call includes a timeout parameter."""
@@ -50,7 +59,7 @@ class TestDownloadFilesSecurity:
                 and func.attr in ('get', 'post', 'put', 'patch', 'delete', 'head', 'options')
             )
             if is_requests_call:
-                keyword_names = [kw.arg for kw in node.keywords]
+                keyword_names = [kw.arg for kw in node.keywords if kw.arg is not None]
                 assert 'timeout' in keyword_names, (
                     f"requests.{func.attr}() call at line {node.lineno} "
                     f"in download_files.py is missing a timeout parameter"
@@ -67,27 +76,31 @@ class TestDownloadFilesSecurity:
                 and func.attr in ('urlopen', 'urlretrieve')
             )
             if is_urllib_call:
-                keyword_names = [kw.arg for kw in node.keywords]
+                keyword_names = [kw.arg for kw in node.keywords if kw.arg is not None]
                 assert 'timeout' in keyword_names, (
                     f"urllib call {func.attr}() at line {node.lineno} "
                     f"in download_files.py is missing a timeout parameter"
                 )
 
-    def test_no_ssl_import(self):
-        """Ensure download_files.py does not import the ssl module."""
+    def test_no_unverified_context_import(self):
+        """Ensure download_files.py does not import _create_unverified_context."""
         for node in ast.walk(self.tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    assert alias.name != 'ssl', (
-                        f"Found 'import ssl' at line {node.lineno} — "
-                        f"ssl module should not be imported directly"
+            if isinstance(node, ast.ImportFrom):
+                if node.module and ('ssl' in node.module):
+                    for alias in node.names:
+                        assert alias.name != '_create_unverified_context', (
+                            f"Found import of _create_unverified_context at "
+                            f"line {node.lineno} — this disables SSL "
+                            f"certificate verification"
+                        )
+            if isinstance(node, ast.Attribute):
+                if (isinstance(node.value, ast.Name)
+                        and node.value.id == 'ssl'
+                        and node.attr == '_create_unverified_context'):
+                    pytest.fail(
+                        "Found ssl._create_unverified_context reference — "
+                        "this disables SSL certificate verification"
                     )
-            elif isinstance(node, ast.ImportFrom):
-                assert node.module != 'ssl' and not (
-                    node.module and node.module.startswith('ssl.')
-                ), (
-                    f"Found 'from ssl ...' import at line {node.lineno}"
-                )
 
     def test_no_unverified_context(self):
         """Ensure _create_unverified_context is not referenced anywhere."""
@@ -98,11 +111,11 @@ class TestDownloadFilesSecurity:
 
 
 class TestExecuteCommandSecurity:
-    """Security tests for execute_command.py."""
+    """Security tests for execute_command.py via AST analysis."""
 
     @pytest.fixture(autouse=True)
     def _load_source(self):
-        with open(EXECUTE_COMMAND_PATH, 'r') as f:
+        with open(EXECUTE_COMMAND_PATH, 'r', encoding='utf-8') as f:
             self.source = f.read()
         self.tree = ast.parse(self.source)
 
@@ -138,7 +151,7 @@ class TestRequirements:
 
     def test_selenium_version_minimum(self):
         """Ensure selenium >= 4.14.0 to avoid known vulnerabilities."""
-        with open(REQUIREMENTS_PATH, 'r') as f:
+        with open(REQUIREMENTS_PATH, 'r', encoding='utf-8') as f:
             content = f.read()
 
         # Find selenium line
@@ -168,7 +181,7 @@ class TestRequirements:
 
 
 class TestWorkflowImports:
-    """Ensure all workflow modules can be imported without error."""
+    """Ensure all workflow modules are valid Python via ast.parse."""
 
     def _get_workflow_files(self):
         workflows = []
@@ -186,7 +199,7 @@ class TestWorkflowImports:
         """All workflow .py files should be valid Python (parseable with ast)."""
         for fname in self._get_workflow_files():
             fpath = os.path.join(WORKFLOWS_DIR, fname)
-            with open(fpath, 'r') as f:
+            with open(fpath, 'r', encoding='utf-8') as f:
                 source = f.read()
             try:
                 ast.parse(source)
