@@ -391,6 +391,15 @@ export default {
       });
       return formatted_commands;
     },
+    addCommand(){
+      this.commands.push("");
+    },
+    removeCommand(index){
+      this.commands.splice(index,1);
+    },
+    clearCommands(){
+      this.commands = [];
+    }
   },
 };
 </script>
@@ -454,12 +463,24 @@ div
                 span {{ workflow.description }}
             hr
             h4 Custom Commands:
-            button#append-command.command-button.atomic-button(style="width: 30%; background-color: green") Add Command
-            button#clear-commands.command-button.atomic-button(style="width: 30%; background-color: firebrick") Clear Commands
+            button#append-command.command-button.atomic-button(style="width: 30%; background-color: green", @click="addCommand") Add Command
+            button#clear-commands.command-button.atomic-button(style="width: 30%; background-color: firebrick", @click="clearCommands") Clear Commands
             br
             br
             #input-command
             // Place holder for appended custom commands
+            div.command-list
+              div(v-for="(command, index) in commands" :key="index")
+                input.command-input(
+                  type="text", 
+                  v-model="commands[index]", 
+                  placeholder="Enter custom command"
+                )
+                button.delete-command(
+                  @click="removeCommand(index)", 
+                  style="background-color: firebrick"
+                ) Remove
+
             hr
             h4 Human behavior configuration:
             table
