@@ -1,0 +1,34 @@
+---
+
+- id: 916031c8-5d56-489d-8c47-78432c1d2fd7
+  name: Browse Web (News Site)
+  description: Simulates a user reading the news. Picks a random site from a
+    small curated list of major news outlets and opens it in the default
+    browser. Generates benign HTTP/DNS/proxy traffic that AE infrastructure can
+    observe alongside any red-team activity.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_browse
+    name: Benign User Activity - Web Browsing
+  platforms:
+    windows:
+      psh:
+        command: |
+          $sites = @("https://www.cnn.com","https://www.bbc.com","https://www.reuters.com","https://www.npr.org","https://news.ycombinator.com")
+          $pick = Get-Random -InputObject $sites
+          Start-Process $pick
+    linux:
+      sh:
+        command: |
+          SITES="https://www.cnn.com https://www.bbc.com https://www.reuters.com https://www.npr.org https://news.ycombinator.com"
+          PICK=$(echo $SITES | tr ' ' '\n' | shuf -n 1)
+          xdg-open "$PICK" >/dev/null 2>&1 &
+    darwin:
+      sh:
+        command: |
+          SITES="https://www.cnn.com https://www.bbc.com https://www.reuters.com https://www.npr.org"
+          PICK=$(echo $SITES | tr ' ' '\n' | sort -R | head -1)
+          open "$PICK"
+  additional_info:
+    human: true
+    benign: true

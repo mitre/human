@@ -1,0 +1,40 @@
+---
+
+- id: 6bc7e789-bb17-4a38-a9d5-25e9c887eef1
+  name: Create Document (Notepad / Text File)
+  description: Simulates a user drafting a short document. On Windows, opens
+    Notepad and writes lorem-ipsum content into the user's Documents folder via
+    PowerShell (no SendKeys race - we write the file directly, then open it so
+    Notepad pops up the way a user would see). On Linux, writes a note file
+    under ~/Documents and opens it with the default editor.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_document
+    name: Benign User Activity - Document Creation
+  platforms:
+    windows:
+      psh:
+        command: |
+          $doc = [Environment]::GetFolderPath('MyDocuments')
+          if (-not (Test-Path $doc)) { New-Item -ItemType Directory -Path $doc | Out-Null }
+          $path = Join-Path $doc ("note-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".txt")
+          $body = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+          Set-Content -Path $path -Value $body
+          Start-Process notepad.exe $path
+    linux:
+      sh:
+        command: |
+          mkdir -p "$HOME/Documents"
+          NOTE="$HOME/Documents/note-$(date +%Y%m%d-%H%M%S).txt"
+          echo "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua." > "$NOTE"
+          xdg-open "$NOTE" >/dev/null 2>&1 &
+    darwin:
+      sh:
+        command: |
+          mkdir -p "$HOME/Documents"
+          NOTE="$HOME/Documents/note-$(date +%Y%m%d-%H%M%S).txt"
+          echo "Lorem ipsum dolor sit amet, consectetur adipiscing elit." > "$NOTE"
+          open -a TextEdit "$NOTE"
+  additional_info:
+    human: true
+    benign: true

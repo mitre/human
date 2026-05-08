@@ -1,0 +1,40 @@
+---
+
+- id: a7ffa1d9-c9db-4960-9fdf-c6438cf399b6
+  name: Click Random Links
+  description: Simulates a user clicking around on the web - opens a couple of
+    benign reference sites in sequence with short pauses between, mimicking a
+    human reading-then-clicking cadence. Pure shell / PowerShell, no scripting
+    runtimes required on the target.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_clickaround
+    name: Benign User Activity - Link Clicking
+  platforms:
+    windows:
+      psh:
+        command: |
+          $links = @("https://en.wikipedia.org/wiki/Special:Random","https://www.weather.com","https://www.wikipedia.org","https://www.reuters.com")
+          foreach ($l in (Get-Random -InputObject $links -Count 3)) {
+            Start-Process $l
+            Start-Sleep -Seconds 4
+          }
+    linux:
+      sh:
+        command: |
+          LINKS="https://en.wikipedia.org/wiki/Special:Random https://www.weather.com https://www.wikipedia.org https://www.reuters.com"
+          for L in $(echo $LINKS | tr ' ' '\n' | shuf -n 3); do
+            xdg-open "$L" >/dev/null 2>&1 &
+            sleep 4
+          done
+    darwin:
+      sh:
+        command: |
+          LINKS="https://en.wikipedia.org/wiki/Special:Random https://www.weather.com https://www.wikipedia.org"
+          for L in $(echo $LINKS | tr ' ' '\n' | sort -R | head -3); do
+            open "$L"
+            sleep 4
+          done
+  additional_info:
+    human: true
+    benign: true

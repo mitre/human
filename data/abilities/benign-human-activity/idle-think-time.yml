@@ -1,0 +1,30 @@
+---
+
+- id: 63becd05-401e-4dcf-80f3-9cd96a8a6830
+  name: Idle Think Time
+  description: Simulates a human pause - reading the screen, thinking, taking a
+    sip of coffee. Pure sleep, no side effects. Useful as a spacer between
+    other benign abilities so the activity timeline doesn't look mechanical.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_idle
+    name: Benign User Activity - Idle Pause
+  platforms:
+    windows:
+      psh:
+        command: |
+          Start-Sleep -Seconds 10
+      cmd:
+        command: |
+          timeout /t 10 /nobreak > NUL
+    linux:
+      sh:
+        command: |
+          sleep 10
+    darwin:
+      sh:
+        command: |
+          sleep 10
+  additional_info:
+    human: true
+    benign: true

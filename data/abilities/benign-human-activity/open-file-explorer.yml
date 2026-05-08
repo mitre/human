@@ -1,0 +1,30 @@
+---
+
+- id: 913b4c7f-8be7-4d69-8fa6-d54771796bc9
+  name: Open File Explorer
+  description: Simulates a user opening their file manager to browse files. On
+    Windows opens explorer.exe at C:\Users\Public\Documents. On Linux opens
+    the user's home directory in the default file manager via xdg-open.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_explorer
+    name: Benign User Activity - File Browsing
+  platforms:
+    windows:
+      psh:
+        command: |
+          Start-Process explorer.exe "C:\Users\Public\Documents"
+      cmd:
+        command: |
+          explorer.exe C:\Users\Public\Documents
+    linux:
+      sh:
+        command: |
+          xdg-open "$HOME" >/dev/null 2>&1 &
+    darwin:
+      sh:
+        command: |
+          open "$HOME"
+  additional_info:
+    human: true
+    benign: true
