@@ -1,0 +1,20 @@
+---
+
+id: d6dbbb19-5357-4090-934a-daa010938e76
+name: GHOSTS Parity (Mixed)
+description: Demonstrates how an operator mixes benign-human-activity abilities
+  across categories (web browsing, file ops, IM/social, idle pauses, system
+  introspection). Designed to run alongside a red-team plan so the activity
+  timeline shows realistic, varied user behavior rather than a single repeated
+  action. Drives sandcat over standard shells - no Python on target.
+atomic_ordering:
+  - 916031c8-5d56-489d-8c47-78432c1d2fd7  # Browse Web (News Site)
+  - ca1bfa41-3bfa-4932-8aca-3e4209bff289  # Browse Web (Chrome)
+  - 2eec2866-d81f-4ec7-874d-91571755511f  # Open Twitter / X Tab
+  - 63becd05-401e-4dcf-80f3-9cd96a8a6830  # Idle Think Time
+  - 6bc7e789-bb17-4a38-a9d5-25e9c887eef1  # Create Document (Notepad / Text File)
+  - 913b4c7f-8be7-4d69-8fa6-d54771796bc9  # Open File Explorer
+  - bf593667-9b3c-4c07-92a3-d0c56c723731  # Chat Client (Pidgin) Launch
+  - 046387fc-ef7c-41e9-8643-23f812aefcd2  # WMI / OS Introspection Query
+  - 738d1fec-cb86-4e06-b0e7-f277eeac854b  # Execute Calculator
+  - a4889e88-0c7a-44e2-afd9-dc589ac1145b  # Check Pending Reboot
