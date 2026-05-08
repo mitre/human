@@ -1,0 +1,15 @@
+---
+
+id: a7d0d079-cc3a-40e0-9987-326570c7cb5f
+name: Office Worker
+description: Benign-human persona that mimics a typical office worker's morning
+  routine - skim webmail, browse news, take a think-pause, then create a quick
+  note. Designed to be run on AE infrastructure ALONGSIDE a red-team adversary
+  plan so the activity timeline shows realistic user behavior next to attacker
+  behavior. Drives sandcat agents over standard shells (PowerShell / cmd / sh)
+  with no Python required on the target.
+atomic_ordering:
+  - 61100ded-5f39-40f3-b554-f5090e34777d  # Open Email (Webmail)
+  - 916031c8-5d56-489d-8c47-78432c1d2fd7  # Browse Web (News Site)
+  - 63becd05-401e-4dcf-80f3-9cd96a8a6830  # Idle Think Time
+  - 6bc7e789-bb17-4a38-a9d5-25e9c887eef1  # Create Document (Notepad / Text File)
