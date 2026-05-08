@@ -1,0 +1,22 @@
+---
+
+- id: f197187d-7d2d-431e-8fe8-68bef1d91955
+  name: Focus Address Bar
+  description: |
+    User presses Ctrl+L to focus the browser's address bar. Single
+    keyboard chord, no mouse motion. Pairs with a subsequent type-text
+    ability to enter a URL.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_focus_addr
+    name: Benign User Activity - Focus Address Bar
+  hid:
+    estimated_duration_s: 1
+    requires:
+      - keyboard
+    steps:
+      - action: chord
+        keys: [LeftControl, l]
+        hold_ms: 50
+      - action: dwell
+        ms: { mean: 120, jitter: 40 }

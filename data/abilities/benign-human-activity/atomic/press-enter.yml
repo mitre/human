@@ -1,0 +1,18 @@
+---
+
+- id: 04b35c49-430a-4e0e-9757-31ebe4ab90a8
+  name: Press Enter
+  description: |
+    Single Enter keypress. Most commonly chained after type-text to
+    submit a URL or form field.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_press_enter
+    name: Benign User Activity - Press Enter
+  hid:
+    estimated_duration_s: 0
+    requires:
+      - keyboard
+    steps:
+      - action: press
+        key: Enter

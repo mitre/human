@@ -1,0 +1,43 @@
+---
+
+- id: c8cb2ea6-1b8f-40eb-8b9b-b225f0368497
+  name: Surf the Web
+  description: |
+    Operator opens Firefox, navigates to a news aggregator, idles ~8 s
+    to "read", scrolls, clicks a random link, idles longer, scrolls
+    more, hits Alt+Left back, repeats. The whole thing replays as
+    HID events through the vhost-user-input daemon — moving cursor,
+    clicks, keystroke timing — so behavioral telemetry sees a person,
+    not a shell.
+
+    Each entry in atomic_ordering is either a bare ability ID
+    (no args needed) or a {ability, args} dict. Args are substituted
+    into the ability's `{{ args.* }}` placeholders at run time by
+    the human-actor daemon.
+  atomic_ordering:
+    - a049c10d-0568-435a-93ca-6b8a739f2a4e             # open-browser-firefox
+    - f197187d-7d2d-431e-8fe8-68bef1d91955             # focus-address-bar
+    - {ability: be98ccaa-7bf2-46d0-8731-498028e13591,  # type-text
+       args: {text: "https://news.ycombinator.com", per_char_ms: 75}}
+    - 04b35c49-430a-4e0e-9757-31ebe4ab90a8             # press-enter
+    - {ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc,  # dwell — read inbox
+       args: {ms: 8000, jitter_ms: 1500}}
+    - {ability: 4db9db58-f1c6-449f-8d70-79e0797e5ca6,  # scroll-down
+       args: {ticks: 5}}
+    - c4d20756-2d7b-488a-bd7b-68dcb8c89e61             # click-link-random
+    - {ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc,  # dwell — read article
+       args: {ms: 12000, jitter_ms: 3000}}
+    - {ability: 4db9db58-f1c6-449f-8d70-79e0797e5ca6,  # scroll-down again
+       args: {ticks: 3}}
+    - f69de0eb-7119-4b8b-91a9-c37e1608fb8d             # alt-left back
+    - {ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc,  # dwell — relisting
+       args: {ms: 3000, jitter_ms: 800}}
+    - {ability: 4db9db58-f1c6-449f-8d70-79e0797e5ca6,
+       args: {ticks: 4}}
+    - c4d20756-2d7b-488a-bd7b-68dcb8c89e61             # click another link
+    - {ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc,
+       args: {ms: 10000, jitter_ms: 2000}}
+  tags:
+    - benign-human-activity
+    - human-profile
+    - browsing

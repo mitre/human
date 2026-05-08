@@ -1,0 +1,32 @@
+---
+
+- id: be98ccaa-7bf2-46d0-8731-498028e13591
+  name: Type Text
+  description: |
+    User types a string letter-by-letter into the foreground window.
+    Per-character delay is jittered so the keystrokes don't look
+    machine-driven. Parametrized — every profile passes its own text +
+    typing-speed value via the adversary YAML's atomic_ordering args.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_type_text
+    name: Benign User Activity - Type Text
+  hid:
+    estimated_duration_s: 4
+    requires:
+      - keyboard
+    args:
+      - name: text
+        type: string
+        default: ""
+        description: The literal string to type, key-by-key.
+      - name: per_char_ms
+        type: int
+        default: 80
+        description: Mean ms between keystrokes; jitter ±30 applied.
+    steps:
+      - action: type
+        text: "{{ args.text }}"
+        per_char_ms:
+          mean: "{{ args.per_char_ms }}"
+          jitter: 30

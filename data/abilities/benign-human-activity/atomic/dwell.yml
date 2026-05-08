@@ -1,0 +1,31 @@
+---
+
+- id: 3be24e8d-f7d0-44cb-a388-a1010274dedc
+  name: Dwell (read / pause)
+  description: |
+    User pauses — reading, thinking, taking a sip of coffee. No HID
+    emission, just the daemon parking the action queue. Realistic
+    durations between abilities are what makes a session look like a
+    person rather than a script. Parametrized so profiles can pick
+    short pauses (mid-task) or long ones (read-the-page).
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_dwell
+    name: Benign User Activity - Dwell
+  hid:
+    estimated_duration_s: 5
+    requires: []
+    args:
+      - name: ms
+        type: int
+        default: 5000
+        description: Approximate dwell time in milliseconds.
+      - name: jitter_ms
+        type: int
+        default: 0
+        description: Random ± jitter added to ms (default 0 = exact).
+    steps:
+      - action: dwell
+        ms:
+          mean: "{{ args.ms }}"
+          jitter: "{{ args.jitter_ms }}"

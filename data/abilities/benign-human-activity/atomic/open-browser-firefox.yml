@@ -1,0 +1,29 @@
+---
+
+- id: a049c10d-0568-435a-93ca-6b8a739f2a4e
+  name: Open Browser (Firefox)
+  description: |
+    User moves the cursor to the Firefox icon on the taskbar, dwells
+    briefly, clicks, and waits for the window to render. HID-level —
+    runs through the vhost-user-input daemon, so PCAP / EDR / mouse-
+    trace logs see the full motion-and-click signal.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_open_firefox
+    name: Benign User Activity - Open Firefox Browser
+  hid:
+    estimated_duration_s: 3
+    requires:
+      - tablet
+      - display
+    steps:
+      - action: move
+        target: { named: taskbar.firefox }
+        duration_ms: 450
+        easing: ease-out
+      - action: dwell
+        ms: { mean: 200, jitter: 80 }
+      - action: click
+        button: left
+      - action: wait_for
+        ms: 1500

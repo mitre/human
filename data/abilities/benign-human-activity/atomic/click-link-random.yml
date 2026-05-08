@@ -1,0 +1,28 @@
+---
+
+- id: c4d20756-2d7b-488a-bd7b-68dcb8c89e61
+  name: Click Random Link
+  description: |
+    Move cursor to a randomly-chosen `<a>` element on the foreground
+    page, then click it. The daemon resolves `target.named=random_link`
+    at run time by inspecting the GPU surface or accepting a target
+    list from a sibling helper (TBD: link picker; for now, daemon
+    chooses a screen position from a configured zone).
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_click_random_link
+    name: Benign User Activity - Click Random Link
+  hid:
+    estimated_duration_s: 1
+    requires:
+      - tablet
+      - display
+    steps:
+      - action: move
+        target: { named: random_link }
+        duration_ms: 350
+        easing: ease-out
+      - action: dwell
+        ms: { mean: 150, jitter: 60 }
+      - action: click
+        button: left

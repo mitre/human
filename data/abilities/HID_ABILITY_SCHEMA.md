@@ -1,206 +1,286 @@
-# HID-style Human Ability Schema
+# Human ability + profile model
 
-The earlier 38 abilities are shell-cradle (PowerShell `Start-Process`, etc.).
-That's fake human emulation — produces the OUTCOME (browser opens to a URL)
-without any of the human-emission signal (mouse motion, focus changes,
-keystroke timing, dwell). PCAP, EDR, and behavioral telemetry see the wrong
-shape: "PowerShell launched edge.exe" instead of "user moved mouse to taskbar,
-clicked, typed URL letter-by-letter."
+## Two-level model
 
-The real model is HID-level: the operator dispatches a sequence of input
-events (mouse moves, clicks, key presses) through our `vhost-user-input`
-daemon, which forwards them as virtio-input events to the guest. The guest's
-stock HID class drivers receive them indistinguishably from a real plugged-in
-USB tablet/keyboard.
+The Human plugin uses Caldera's standard adversary→ability hierarchy,
+sized for human emulation:
 
-Abilities under `data/abilities/benign-human-activity/` should migrate to
-this new step-list format. Existing shell-cradle YAMLs are deprecated but
-kept for backward-compat reference.
+```
+Profile (= Caldera adversary YAML)         "Surf the Web"
+   ├── Atomic ability                          open-browser-firefox
+   ├── Atomic ability                          focus-address-bar
+   ├── Atomic ability (parametrized)           type-text(text="https://news.ycombinator.com")
+   ├── Atomic ability                          press-enter
+   ├── Atomic ability (parametrized)           dwell(ms=8000)
+   ├── Atomic ability                          scroll-down
+   ├── Atomic ability                          click-link-random
+   ├── Atomic ability (parametrized)           dwell(ms=12000)
+   └── …
+```
 
-## YAML shape
+| Caldera term | Human term | File location | Examples |
+|---|---|---|---|
+| Adversary | **Profile** | `data/adversaries/` | `surf-the-web.yml`, `office-worker.yml`, `developer.yml` |
+| Ability | **Atomic action** | `data/abilities/benign-human-activity/atomic/` | `open-browser-firefox.yml`, `type-text.yml`, `press-enter.yml`, `dwell.yml` |
+
+This is the same shape as red-team operations in stockpile: an
+adversary references atomic abilities; a profile references atomic
+human actions. Operators can mix: an adversary can include both red
+abilities AND human-profile abilities in the same operation, which is
+exactly the AE goal — emulate a real user doing benign work while a
+red-team adversary moves laterally.
+
+## Why atomic, not chunky
+
+The earlier 38 abilities were chunky: one ability did the whole "open
+email + read + click around" sequence. That's wrong because:
+
+1. **No reuse.** Every ability re-implemented "type a URL" inline.
+2. **Profiles can't compose.** A "browse-then-email" profile would
+   need a new chunky ability or copy-paste the URL-typing logic.
+3. **Caldera operations can't intercut.** If a red ability takes 30s
+   in the middle of a human's session, the chunky ability has to
+   yield — atomic abilities just take their natural turn in the
+   ordered queue.
+
+Atomic = one HID act, parametrized. Profile = ordered list of those.
+
+## Atomic ability YAML
 
 ```yaml
 - id: <uuid>
-  name: <human-readable label>
-  description: |
-    What this simulates from a *user's* perspective. NOT
-    what shell does. Think "user clicks browser icon and types URL"
-    not "Start-Process msedge.exe".
-  persona: office_worker | developer | executive | support_agent | sales_rep
+  name: <short verb-phrase>
+  description: <one-line, what the user perceives>
   tactic: benign-human-activity
   technique:
-    attack_id: x_human_<name>          # placeholder, not real ATT&CK
-    name: Benign User Activity - <Name>
-  hid:                                  # NEW SECTION — replaces `platforms`
-    estimated_duration_s: 25            # for UI timeline display
+    attack_id: x_human_<verb>
+    name: Benign User Activity - <Verb>
+  hid:
+    estimated_duration_s: <int>      # for UI timeline
     requires:
-      - tablet                          # uses absolute-positioning input
-      - keyboard
-      - display                         # wants the GPU surface alive
+      - tablet | mouse | keyboard | display
+    args:                            # optional — parametrize per-call
+      - name: text
+        type: string
+        default: ""
+      - name: per_char_ms
+        type: int
+        default: 80
     steps:
-      - action: move
-        target: { kind: abs, x: <0..32767>, y: <0..32767> }
-        duration_ms: 450                # how long the move takes
-        easing: ease-out                # human-like; default linear
-      - action: dwell
-        ms: { mean: 200, jitter: 80 }   # mean ± jitter, sampled per-run
-      - action: click
-        button: left | right | middle
+      # step uses {{ args.text }} etc. for substitution; daemon does
+      # the substitution at run time.
       - action: type
-        text: "letter-by-letter input"
-        per_char_ms: { mean: 80, jitter: 30 }
-      - action: press
-        key: Enter | Tab | Escape | F1..F12 | <char>
-      - action: scroll
-        wheel: up | down
-        ticks: 3
-      - action: wait_for
-        # No HID emission — daemon parks until condition. Deliberately
-        # does NOT poll the guest (would require an in-guest agent).
-        # Just sleeps. Operator validates separately if they need to.
-        ms: 5000
+        text: "{{ args.text }}"
+        per_char_ms: { mean: "{{ args.per_char_ms }}", jitter: 30 }
 ```
 
-## Action vocabulary
+## Profile YAML (Caldera adversary)
+
+```yaml
+- id: <uuid>
+  name: <persona or task label>
+  description: <what the human is trying to accomplish>
+  atomic_ordering:
+    # Plain ability ID (no args needed)
+    - <ability_uuid>
+    # Ability with args
+    - {ability: <ability_uuid>, args: {text: "https://news.ycombinator.com"}}
+    - {ability: <dwell_uuid>, args: {ms: 8000}}
+    # … etc.
+```
+
+The arg-bound entry is the same shape Caldera's stockpile uses for
+parametrized abilities. The Human plugin's `human_svc` materializes
+the ordering into a sequence of HID steps the human-actor daemon
+replays.
+
+## Action vocabulary (used inside atomic abilities)
 
 | action | required fields | semantics |
 |---|---|---|
-| `move` | `target`, `duration_ms` | smooth interpolated motion to target. `target.kind=abs` for tablets (x/y in 0..32767), `kind=rel` for mouse (dx/dy) |
-| `click` | `button` | full press+release of the button |
-| `press` | `key` | full press+release of a key |
-| `keydown` / `keyup` | `key` | one half of the key-event pair (for chords) |
-| `type` | `text`, `per_char_ms` | iterates `text`, presses each char with the inter-char delay |
-| `dwell` | `ms` | sleep, no input emission. `ms` may be `int` or `{mean, jitter}` |
-| `wait_for` | `ms` | sleep (longer). Same as dwell, semantic hint that we're "waiting on something the operator can't observe" |
-| `scroll` | `wheel`, `ticks` | wheel events, equivalent to N notches |
-| `chord` | `keys: [a, b, c]`, `hold_ms` | press-all, hold, release-all. For Ctrl+L, Alt+Tab, etc. |
-| `repeat` | `count`, `steps: [...]` | sub-sequence run N times. Useful for typing characters one at a time |
+| `move` | `target`, `duration_ms` | smooth interpolated motion. `target.kind=abs` for tablets, `kind=rel` for mouse, `target.named=…` for known coords |
+| `click` | `button` | press+release |
+| `press` | `key` | press+release |
+| `keydown` / `keyup` | `key` | half of the press/release pair (chords) |
+| `type` | `text`, `per_char_ms` | one-by-one keystrokes with timing |
+| `dwell` | `ms` | sleep, no input emission. `ms` may be int or `{mean, jitter}` |
+| `wait_for` | `ms` | sleep (longer); semantic hint |
+| `scroll` | `wheel`, `ticks` | wheel events |
+| `chord` | `keys: [...]`, `hold_ms` | press-all, hold, release-all |
+| `repeat` | `count`, `steps: [...]` | sub-sequence run N times |
 
-## Easing functions (for `move`)
+## Easing (for `move`)
 
 | name | shape | when to use |
 |---|---|---|
-| `linear` | constant velocity | default; least human-feeling |
-| `ease-out` | starts fast, slows | human pointing-at-target motion |
-| `ease-in-out` | accelerate, peak, decelerate | longer drags / drift |
-| `human` | curve fit to real-mouse studies | most realistic; uses Bezier-fit |
+| `linear` | constant velocity | least human |
+| `ease-out` | starts fast, slows | pointing at target |
+| `ease-in-out` | accelerate, peak, decelerate | longer drags |
+| `human` | Bezier-fit to real-mouse studies | most realistic |
 
-Easing is applied client-side in the daemon when interpolating between
-waypoints. The daemon emits sub-pixel-accumulated `EV_REL`/`EV_ABS` packets
-at ~125Hz for smooth motion.
+## Coordinate system (for `move`)
 
-## Coordinate system
+`target.kind=abs` (tablet, recommended): x, y in [0, 32767].
+`target.kind=rel` (mouse): dx, dy as signed deltas.
+`target.named=...`: daemon resolves at run time:
 
-`target.kind=abs` (recommended for tablets):
-- x and y are uint16 in `[0, 32767]` range (the virtio-tablet's logical range).
-- The daemon scales to actual screen geometry. Operator authoring an ability
-  doesn't need to know the resolution.
-- Use `coord_named` symbols for common targets:
-  - `{ named: taskbar.firefox }` → daemon resolves at run-time via known taskbar layout
-  - `{ named: address_bar }` → relative to the foreground window's bounds
-  - `{ named: random_link }` → daemon picks a random `<a>` tag's screen position
+| named | resolved to |
+|---|---|
+| `taskbar.firefox` | (configured taskbar layout) |
+| `taskbar.chrome` | (configured taskbar layout) |
+| `address_bar` | foreground window's URL bar |
+| `random_link` | screen position of a random `<a>` in the foreground browser |
+| `app.<name>.window_close` | close button of a named app window |
 
-`target.kind=rel`:
-- dx, dy are signed deltas. Mouse motion only.
+## Migration plan from the 38 chunky abilities
 
-## Authoring tools
+1. Catalog the 38 — list which atomic actions each one was made of.
+2. Write the ~20 atomic ability YAMLs (one per primitive verb).
+3. Convert the 6 persona adversaries to reference atomic abilities.
+4. Mark the original 38 with `legacy: shell-cradle` and stop loading
+   them in the human-actor pipeline (they remain queryable for
+   backward-compatibility with any operator who pinned them by ID).
+5. Add a compatibility shim in `human_svc` so `surf-the-web`-style
+   profiles materialize correctly into HID step sequences.
 
-For now, abilities are hand-written YAML. A future authoring tool would:
-1. Show a screen capture of a typical persona's desktop
-2. Operator clicks the path they want, marks dwell points
-3. Tool emits the `steps:` list
+## Worked example: "Surf the Web"
 
-## Migration from shell-cradle abilities
+### Atomic abilities (each gets its own YAML)
 
-The 38 abilities under `data/abilities/benign-human-activity/` will be:
-1. Marked with `legacy: shell-cradle` in their YAML
-2. Re-implemented as HID step-lists in the new format under
-   `data/abilities/benign-human-activity/hid/`
-
-Adversary YAMLs under `data/adversaries/` reference abilities by `id`. After
-migration, the new HID-format abilities get NEW ids (UUIDs), and adversary
-profiles get new versions that reference the new IDs. The old IDs stay valid
-for legacy operations.
-
-## Worked examples
-
-### open-email-webmail (HID format)
-
+`open-browser-firefox`:
 ```yaml
-- id: a-new-uuid
-  name: Open Email (Webmail) — HID
-  description: Operator clicks the browser icon, types the webmail URL letter-by-letter, waits ~8s for inbox to render, scrolls.
-  persona: office_worker
-  tactic: benign-human-activity
-  technique:
-    attack_id: x_human_email_webmail
-    name: Benign User Activity - Webmail Email
+- id: <uuid>
+  name: Open Browser (Firefox)
   hid:
-    estimated_duration_s: 22
-    requires: [tablet, keyboard, display]
-    steps:
-      - action: move
-        target: { named: taskbar.firefox }
-        duration_ms: 450
-        easing: ease-out
-      - action: dwell
-        ms: { mean: 200, jitter: 80 }
-      - action: click
-        button: left
-      - action: wait_for
-        ms: 1500                         # window appearing
-      - action: move
-        target: { named: address_bar }
-        duration_ms: 280
-      - action: click
-        button: left
-      - action: type
-        text: "https://outlook.live.com"
-        per_char_ms: { mean: 80, jitter: 30 }
-      - action: press
-        key: Enter
-      - action: dwell
-        ms: { mean: 8000, jitter: 2000 }
-      - action: scroll
-        wheel: down
-        ticks: 5
-      - action: dwell
-        ms: { mean: 4000, jitter: 1000 }
-```
-
-### click-random-links (HID format)
-
-```yaml
-- id: b-new-uuid
-  name: Click Random Links — HID
-  description: Operator scrolls a page, picks a random link, clicks, reads briefly, hits back. Repeats 3 times.
-  persona: any
-  tactic: benign-human-activity
-  technique:
-    attack_id: x_human_browse_links
-    name: Benign User Activity - Random Link Browse
-  hid:
-    estimated_duration_s: 60
+    estimated_duration_s: 3
     requires: [tablet, display]
     steps:
-      - action: repeat
-        count: 3
-        steps:
-          - action: scroll
-            wheel: down
-            ticks: { mean: 4, jitter: 2 }
-          - action: dwell
-            ms: { mean: 3000, jitter: 1500 }
-          - action: move
-            target: { named: random_link }
-            duration_ms: 350
-          - action: click
-            button: left
-          - action: dwell
-            ms: { mean: 8000, jitter: 3000 }
-          - action: chord
-            keys: [LeftAlt, Left]
-            hold_ms: 100
-          - action: dwell
-            ms: 1500
+      - { action: move, target: { named: taskbar.firefox }, duration_ms: 450, easing: ease-out }
+      - { action: dwell, ms: { mean: 200, jitter: 80 } }
+      - { action: click, button: left }
+      - { action: wait_for, ms: 1500 }
 ```
+
+`focus-address-bar`:
+```yaml
+- id: <uuid>
+  name: Focus Address Bar
+  hid:
+    estimated_duration_s: 1
+    requires: [keyboard]
+    steps:
+      - { action: chord, keys: [LeftControl, l], hold_ms: 50 }
+```
+
+`type-text` (parametrized):
+```yaml
+- id: <uuid>
+  name: Type Text
+  hid:
+    estimated_duration_s: 4   # estimate; varies with text length
+    requires: [keyboard]
+    args:
+      - name: text
+        type: string
+        default: ""
+      - name: per_char_ms
+        type: int
+        default: 80
+    steps:
+      - { action: type, text: "{{ args.text }}",
+          per_char_ms: { mean: "{{ args.per_char_ms }}", jitter: 30 } }
+```
+
+`press-enter`:
+```yaml
+- id: <uuid>
+  name: Press Enter
+  hid:
+    estimated_duration_s: 0
+    requires: [keyboard]
+    steps:
+      - { action: press, key: Enter }
+```
+
+`dwell` (parametrized):
+```yaml
+- id: <uuid>
+  name: Dwell (read / pause)
+  hid:
+    estimated_duration_s: 8     # placeholder; real value comes from args
+    requires: []
+    args:
+      - { name: ms, type: int, default: 5000 }
+    steps:
+      - { action: dwell, ms: "{{ args.ms }}" }
+```
+
+`scroll-down`:
+```yaml
+- id: <uuid>
+  name: Scroll Down
+  hid:
+    estimated_duration_s: 1
+    requires: [tablet]
+    args:
+      - { name: ticks, type: int, default: 4 }
+    steps:
+      - { action: scroll, wheel: down, ticks: "{{ args.ticks }}" }
+```
+
+`click-link-random`:
+```yaml
+- id: <uuid>
+  name: Click Random Link
+  hid:
+    estimated_duration_s: 1
+    requires: [tablet, display]
+    steps:
+      - { action: move, target: { named: random_link }, duration_ms: 350 }
+      - { action: click, button: left }
+```
+
+### Profile (adversary YAML)
+
+`surf-the-web.yml`:
+```yaml
+- id: <uuid>
+  name: Surf the Web
+  description: |
+    Operator opens Firefox, navigates to a news aggregator, idles to
+    "read", scrolls, clicks a random link, idles, scrolls more, alt-back,
+    repeats 2 more times.
+  atomic_ordering:
+    - <open-browser-firefox>
+    - <focus-address-bar>
+    - {ability: <type-text>, args: {text: "https://news.ycombinator.com"}}
+    - <press-enter>
+    - {ability: <dwell>, args: {ms: 8000}}
+    - {ability: <scroll-down>, args: {ticks: 5}}
+    - <click-link-random>
+    - {ability: <dwell>, args: {ms: 12000}}
+    - {ability: <scroll-down>, args: {ticks: 3}}
+    - {ability: <chord-alt-left>, args: {}}     # back to news listing
+    - {ability: <dwell>, args: {ms: 3000}}
+    - {ability: <scroll-down>, args: {ticks: 4}}
+    - <click-link-random>
+    - {ability: <dwell>, args: {ms: 10000}}
+```
+
+The same atomic abilities compose into other profiles (Office Worker,
+Developer, Sales Rep) by changing the ordering and the arg values.
+
+## Where Vue renders this
+
+`gui/views/human.vue`:
+
+- **Profile selector** (per host): operator picks "Surf the Web",
+  "Office Worker", etc. — these come from `data/adversaries/` filtered
+  to `tactic includes benign-human-activity` or by tag.
+- **Step preview panel**: when a profile is selected, the panel
+  expands the profile's atomic ordering into a flat list of steps.
+  Per-ability args are rendered inline (e.g. `type-text("https://...")`).
+- **Live viewer**: VNC iframe of the selected host's framebuffer.
+- **Now-running indicator**: highlights the currently-executing
+  step in the preview list (driven by an SSE from the human-actor
+  daemon).
