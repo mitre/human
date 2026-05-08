@@ -50,7 +50,7 @@ def run(clustersize, taskinterval, taskgroupinterval, extra):
         for workflow in workflows:
             workflow.cleanup()
         exit(0)
-    
+
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
@@ -58,8 +58,48 @@ def run(clustersize, taskinterval, taskgroupinterval, extra):
                     taskgroupinterval=taskgroupinterval, extra=extra)
 
 
+def run_control(sock_path=None):
+    """Boot the keep-alive control server (Timestone mode).
+
+    Loads workflows the same way the random scheduler does, then hands off to
+    control_server.serve(), which blocks waiting for operator-pushed jobs over
+    a Unix domain socket.
+    """
+    # Support both `python -m pyhuman.human` (package context) and
+    # `python pyhuman/human.py` (script context).
+    try:
+        from . import control_server  # type: ignore
+    except ImportError:
+        here = os.path.dirname(os.path.realpath(__file__))
+        parent = os.path.dirname(here)
+        if parent not in sys.path:
+            sys.path.insert(0, parent)
+        from pyhuman import control_server  # type: ignore
+
+    workflows = import_workflows()
+
+    def signal_handler(sig, frame):
+        for workflow in workflows:
+            try:
+                workflow.cleanup()
+            except Exception:  # noqa: BLE001
+                pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    control_server.serve(workflows, sock_path=sock_path)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Emulate human behavior on a system')
+    parser.add_argument('--mode', choices=['random', 'control'], default='random',
+                        help='random = legacy random-walk emulation loop; '
+                             'control = keep-alive command server (UDS).')
+    parser.add_argument('--sock', default=None,
+                        help='UDS path for --mode control '
+                             '(defaults to $PYHUMAN_CONTROL_SOCK or /tmp/pyhuman.sock).')
     parser.add_argument('--clustersize', type=int, default=TASK_CLUSTER_COUNT)
     parser.add_argument('--taskinterval', type=int, default=TASK_INTERVAL_SECONDS)
     parser.add_argument('--taskgroupinterval', type=int, default=GROUPING_INTERVAL_SECONDS)
@@ -67,12 +107,15 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     try:
-        run(
-            clustersize=args.clustersize,
-            taskinterval=args.taskinterval,
-            taskgroupinterval=args.taskgroupinterval,
-            extra=args.extra
-        )
+        if args.mode == 'control':
+            run_control(sock_path=args.sock)
+        else:
+            run(
+                clustersize=args.clustersize,
+                taskinterval=args.taskinterval,
+                taskgroupinterval=args.taskgroupinterval,
+                extra=args.extra
+            )
     except KeyboardInterrupt:
         print(" Terminating human execution...")
         sys.exit()
