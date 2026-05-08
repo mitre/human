@@ -109,6 +109,38 @@
             </div>
           </div>
 
+          <!-- HID step preview ============================================ -->
+          <!-- Shows the action sequence (move/click/type/dwell) that this
+               ability will replay through the vhost-user-input daemon. The
+               whole point of the rewrite is that abilities are NOT shell
+               cradles — they're step-lists of HID events. The viewer below
+               will show the actual cursor + keystrokes hit the guest. -->
+          <div v-if="selectedAbilitySteps.length" class="step-preview mb-3">
+            <div class="is-flex is-justify-content-space-between is-align-items-baseline">
+              <h4 class="title is-6 mb-1">Step preview</h4>
+              <small class="has-text-grey">
+                {{ selectedAbilitySteps.length }} steps
+                · ~{{ selectedAbilityDurationS }}s estimated
+              </small>
+            </div>
+            <ol class="step-list">
+              <li v-for="(s, i) in selectedAbilitySteps" :key="i" class="step-row">
+                <span class="step-idx has-text-grey">{{ i + 1 }}</span>
+                <span class="step-action tag is-dark is-small">{{ s.action }}</span>
+                <span class="step-detail">{{ stepDetail(s) }}</span>
+              </li>
+            </ol>
+          </div>
+          <div v-else-if="selectedWorkflowName" class="notification is-dark py-2 px-3 mb-3">
+            <p class="is-size-7">
+              Legacy shell-cradle ability (no HID step-list). It will run as
+              a single shell command via sandcat, not through the input
+              daemon. Convert to the HID format
+              (<code>data/abilities/HID_ABILITY_SCHEMA.md</code>) for real
+              human emulation.
+            </p>
+          </div>
+
           <!-- Args + Run -->
           <div class="field">
             <label class="label is-small">Args (passed to human ability)</label>
@@ -168,25 +200,36 @@
       </main>
 
       <!-- GUI VIEWER (right) ============================================== -->
+      <!-- Live framebuffer of the selected host. The vhost-user-gpu-2d
+           daemon (timestone/vhost-user-daemons/) renders the guest's
+           virtio-gpu surface and serves it over RFB; a host-side
+           websockify proxy bridges that to a websocket the noVNC
+           component below consumes. The host's `vnc_ws` field is set
+           by the Range provider when `session_type: gui` is on the
+           image and the GPU daemon is alive. -->
       <aside class="gui-viewer">
-        <h3 class="title is-6">Live GUI</h3>
-        <!-- TODO: Wire up noVNC iframe once control_server.py exposes a
-             per-host websocket URL. The contract is expected to look like:
-                 vnc_ws = `ws://<server>/plugin/human/vnc/<host_id>`
-             At that point replace this TODO panel with:
-                 <iframe :src="vncUrl" class="vnc-frame" />
-             where vncUrl is computed from selectedHost.vnc_ws. -->
+        <h3 class="title is-6">
+          Live Endpoint
+          <span v-if="currentStepIdx != null" class="tag is-link is-small ml-2">
+            step {{ currentStepIdx + 1 }} / {{ selectedAbilitySteps.length }}
+          </span>
+        </h3>
         <div v-if="selectedHost && selectedHost.vnc_ws" class="vnc-wrapper">
           <iframe :src="selectedHost.vnc_ws" class="vnc-frame"></iframe>
         </div>
         <div v-else class="notification is-dark todo-panel">
           <p>
-            <strong>TODO:</strong> noVNC iframe slot. Will embed a websocket
-            stream once <code>control_server.py</code> exposes a per-host
-            VNC bridge.
+            <strong>Viewer not connected.</strong> The host has no
+            <code>vnc_ws</code> yet — the vhost-user-gpu-2d daemon for
+            this microVM either isn't running, or its websockify bridge
+            hasn't been registered with the Range provider.
           </p>
           <p class="is-size-7 mt-2">
             Selected host: <code>{{ selectedHost?.id || '—' }}</code>
+          </p>
+          <p class="is-size-7 mt-2">
+            Spawn the daemon manually for this host:<br/>
+            <code class="is-size-7">vhost-user-gpu-2d --socket /tmp/ts-gpu-{{ selectedHost?.id || 'X' }}.sock --vnc 127.0.0.1:5900</code>
           </p>
         </div>
       </aside>
@@ -240,6 +283,61 @@ const filteredHosts = computed(() => {
 const scopedCommandLog = computed(() =>
   commandLog.value.filter(e => e.host_id === selectedHostId.value)
 )
+
+// ---- HID step preview ----------------------------------------------------
+// `selectedAbilitySteps` is the list of HID steps for the currently-selected
+// ability, IF the ability's YAML is the new HID format. Legacy shell-cradle
+// abilities have no `hid.steps` key — those render the legacy notice block
+// instead.
+const selectedAbilitySteps = computed(() => {
+  const a = assignments[selectedHostId.value]
+  if (!a) return []
+  const wf = workflows.value.find(w => w.id === a.workflow_id)
+  return (wf && wf.hid && Array.isArray(wf.hid.steps)) ? wf.hid.steps : []
+})
+
+const selectedAbilityDurationS = computed(() => {
+  const a = assignments[selectedHostId.value]
+  if (!a) return 0
+  const wf = workflows.value.find(w => w.id === a.workflow_id)
+  return (wf && wf.hid && wf.hid.estimated_duration_s) || 0
+})
+
+// `currentStepIdx` is the step the in-flight human-actor is replaying right
+// now (0-indexed). Set by the assignment-status SSE / poll once we wire it.
+// Until then it stays null so the viewer header just shows the static label.
+const currentStepIdx = ref(null)
+
+// Pretty one-line description of a step row, for the preview list. We keep
+// this short enough that 10-30 steps fit in the visible panel without scroll.
+function stepDetail(step) {
+  switch (step.action) {
+    case 'move': {
+      const t = step.target || {}
+      const where = t.named ? t.named
+        : t.kind === 'abs' ? `(${t.x}, ${t.y})`
+        : t.kind === 'rel' ? `Δ(${t.dx ?? 0}, ${t.dy ?? 0})`
+        : '?'
+      return `→ ${where} (${step.duration_ms || 0}ms${step.easing ? ', ' + step.easing : ''})`
+    }
+    case 'click':    return step.button || 'left'
+    case 'press':    return step.key || ''
+    case 'keydown':  return `↓ ${step.key || ''}`
+    case 'keyup':    return `↑ ${step.key || ''}`
+    case 'type':     return JSON.stringify((step.text || '').slice(0, 40))
+    case 'dwell':
+    case 'wait_for': {
+      const ms = step.ms
+      if (ms == null) return ''
+      if (typeof ms === 'object') return `${ms.mean}ms ± ${ms.jitter || 0}`
+      return `${ms}ms`
+    }
+    case 'scroll':   return `${step.wheel || 'down'} × ${step.ticks || 1}`
+    case 'chord':    return (step.keys || []).join(' + ')
+    case 'repeat':   return `× ${step.count || 0}`
+    default:         return ''
+  }
+}
 
 // ---- Helpers -------------------------------------------------------------
 function statusTagClass(status) {
@@ -482,5 +580,41 @@ onMounted(() => {
 .dropdown.is-fullwidth,
 .dropdown-menu.is-fullwidth {
   width: 100%;
+}
+
+/* Step-preview list: dense, monospace step lines for HID abilities. */
+.step-preview {
+  background: #1b1b1b;
+  border: 1px solid #272727;
+  border-radius: 3px;
+  padding: 0.5rem 0.75rem;
+}
+.step-list {
+  list-style: none;
+  margin: 0.25rem 0 0 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 0.78em;
+}
+.step-row {
+  display: grid;
+  grid-template-columns: 1.5rem 4.5rem 1fr;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.15rem 0;
+  border-bottom: 1px dotted #272727;
+}
+.step-row:last-child { border-bottom: none; }
+.step-idx {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.step-detail {
+  color: #939393;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

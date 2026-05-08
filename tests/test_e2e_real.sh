@@ -144,12 +144,21 @@ CID=4327
 CH_PID=$!
 log "CH spawned pid=$CH_PID cid=$CID vsock=$RUNTIME/vsock.sock"
 
-# Wait for shim to bind on vsock port 5252.
+# Wait for shim to bind on vsock port 5252. Newer rootfs versions log
+# the readiness line to journald (not serial), so the authoritative
+# liveness check is a CONNECT probe over the vsock UDS itself.
 SHIM_READY=0
 for i in $(seq 1 90); do
+    if [[ -S "$RUNTIME/vsock.sock" ]] && \
+       printf 'CONNECT 5252\n' | timeout 2 nc -U "$RUNTIME/vsock.sock" 2>/dev/null | grep -q '^OK '; then
+        SHIM_READY=1
+        log "shim ready at ${i}s (vsock CONNECT 5252 -> OK)"
+        break
+    fi
+    # Legacy fallback: older rootfs logs to serial console.
     if grep -q "listening on vsock port 5252" "$RUNTIME/serial.log" 2>/dev/null; then
         SHIM_READY=1
-        log "shim ready at ${i}s"
+        log "shim ready at ${i}s (serial-log marker)"
         break
     fi
     if ! kill -0 "$CH_PID" 2>/dev/null; then
