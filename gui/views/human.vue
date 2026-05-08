@@ -1,515 +1,482 @@
+<template>
+  <div class="human-live">
+    <!-- HEADER ============================================================ -->
+    <section class="human-header">
+      <h2 class="title is-4">
+        Human (Live)
+        <span class="subtitle is-6 ml-2" v-if="rangeProfileName">
+          — {{ rangeProfileName }} ({{ hosts.length }} hosts)
+        </span>
+      </h2>
+      <div class="is-flex is-align-items-center">
+        <button class="button is-small is-light mr-2" @click="refreshAll" :disabled="loading">
+          <span class="icon is-small"><i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i></span>
+          <span>Refresh</span>
+        </button>
+        <button class="button is-small is-light" @click="commandLog = []">
+          <span class="icon is-small"><i class="fas fa-trash"></i></span>
+          <span>Clear log</span>
+        </button>
+      </div>
+    </section>
+
+    <div class="human-grid">
+      <!-- HOSTS PANEL (left) ============================================== -->
+      <aside class="hosts-panel">
+        <h3 class="title is-6">Hosts</h3>
+        <input
+          class="input is-small mb-2"
+          type="text"
+          placeholder="Filter hosts..."
+          v-model="hostFilter"
+        />
+        <ul class="hosts-list">
+          <li
+            v-for="host in filteredHosts"
+            :key="host.id"
+            :class="{ 'is-selected': selectedHostId === host.id }"
+            @click="selectHost(host.id)"
+          >
+            <div class="host-row">
+              <span class="host-name">{{ host.name || host.id }}</span>
+              <span
+                class="tag is-small"
+                :class="statusTagClass(assignments[host.id]?.status)"
+              >
+                {{ assignments[host.id]?.status || 'idle' }}
+              </span>
+            </div>
+            <div class="host-meta">
+              <small>{{ host.ip || '—' }}</small>
+            </div>
+          </li>
+          <li v-if="filteredHosts.length === 0" class="has-text-centered has-text-grey">
+            <em>No hosts</em>
+          </li>
+        </ul>
+      </aside>
+
+      <!-- COMMAND STREAM (center) ========================================= -->
+      <main class="command-stream">
+        <div v-if="!selectedHost" class="has-text-centered has-text-grey-light pt-6">
+          <p><em>Select a host on the left to assign workflows or send commands.</em></p>
+        </div>
+
+        <div v-else>
+          <h3 class="title is-5">{{ selectedHost.name || selectedHost.id }}</h3>
+
+          <!-- Workflow dropdown (mirrors range.vue:27-56 pattern) -->
+          <div class="field">
+            <label class="label is-small">Workflow</label>
+            <div
+              class="dropdown searchable is-flex-grow-1"
+              :class="{ 'is-active': isDropdownOpen }"
+            >
+              <div class="dropdown-trigger">
+                <button
+                  class="button is-fullwidth"
+                  type="button"
+                  aria-haspopup="true"
+                  aria-controls="workflow-dropdown-menu"
+                  @click="isDropdownOpen = !isDropdownOpen"
+                >
+                  <span>{{ selectedWorkflowName || 'Select Workflow' }}</span>
+                  <span class="icon is-small">
+                    <i class="fas fa-angle-down"></i>
+                  </span>
+                </button>
+              </div>
+              <div class="dropdown-menu" id="workflow-dropdown-menu" role="menu">
+                <div class="dropdown-content">
+                  <a
+                    class="dropdown-item"
+                    v-for="wf in workflows"
+                    :key="wf.id"
+                    :class="{ 'is-active': assignments[selectedHostId]?.workflow_id === wf.id }"
+                    @click="assignWorkflow(wf); isDropdownOpen = false"
+                  >
+                    <strong>{{ wf.name }}</strong>
+                    <p class="has-text-grey is-size-7">{{ wf.description }}</p>
+                  </a>
+                  <p
+                    class="has-text-centered"
+                    v-if="workflows.length === 0"
+                  >
+                    No workflows available
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Args + Run -->
+          <div class="field">
+            <label class="label is-small">Args (passed to workflow)</label>
+            <div class="field has-addons">
+              <div class="control is-expanded">
+                <input
+                  class="input"
+                  type="text"
+                  placeholder="--flag value ..."
+                  v-model="argsInput"
+                  @keyup.enter="runAssignedWorkflow"
+                />
+              </div>
+              <div class="control">
+                <button
+                  class="button is-primary"
+                  :disabled="!assignments[selectedHostId]?.workflow_id"
+                  @click="runAssignedWorkflow"
+                >
+                  Run
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Free-form ad-hoc command -->
+          <div class="field">
+            <label class="label is-small">Ad-hoc command</label>
+            <div class="field has-addons">
+              <div class="control is-expanded">
+                <input
+                  class="input"
+                  type="text"
+                  placeholder="raw command line..."
+                  v-model="adhocInput"
+                  @keyup.enter="runAdhoc"
+                />
+              </div>
+              <div class="control">
+                <button class="button is-link" @click="runAdhoc" :disabled="!adhocInput.trim()">
+                  Send
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live I/O log -->
+          <div class="io-panel">
+            <h4 class="title is-6 mb-2">Output</h4>
+            <pre class="io-log">
+<template v-for="(entry, i) in scopedCommandLog" :key="i"><span :class="['io-line', 'io-' + entry.direction]">[{{ formatTs(entry.ts) }}] [{{ entry.direction }}] {{ entry.line }}
+</span></template>
+<span v-if="scopedCommandLog.length === 0" class="has-text-grey">(no output yet)</span>
+            </pre>
+          </div>
+        </div>
+      </main>
+
+      <!-- GUI VIEWER (right) ============================================== -->
+      <aside class="gui-viewer">
+        <h3 class="title is-6">Live GUI</h3>
+        <!-- TODO: Wire up noVNC iframe once control_server.py exposes a
+             per-host websocket URL. The contract is expected to look like:
+                 vnc_ws = `ws://<server>/plugin/human/vnc/<host_id>`
+             At that point replace this TODO panel with:
+                 <iframe :src="vncUrl" class="vnc-frame" />
+             where vncUrl is computed from selectedHost.vnc_ws. -->
+        <div v-if="selectedHost && selectedHost.vnc_ws" class="vnc-wrapper">
+          <iframe :src="selectedHost.vnc_ws" class="vnc-frame"></iframe>
+        </div>
+        <div v-else class="todo-panel">
+          <p class="has-text-grey">
+            <strong>TODO:</strong> noVNC iframe slot. Will embed a websocket
+            stream once <code>control_server.py</code> exposes a per-host
+            VNC bridge.
+          </p>
+          <p class="has-text-grey-light is-size-7 mt-2">
+            Selected host: <code>{{ selectedHost?.id || '—' }}</code>
+          </p>
+        </div>
+      </aside>
+    </div>
+  </div>
+</template>
+
 <script setup>
-import { inject, ref, onMounted, computed } from "vue";
-import { storeToRefs } from "pinia";
+import { ref, reactive, computed, onMounted, inject } from 'vue'
 
-const $api = inject("$api");
+// Mirrors range.vue (line 357): the host app injects $api for HTTP calls.
+const $api = inject('$api')
 
-onMounted(async () => {});
+// ---- State ---------------------------------------------------------------
+const hosts = ref([])                  // [{id, name, ip, status, vnc_ws}]
+const workflows = ref([])              // [{id, name, description}]
+const assignments = reactive({})       // assignments[host_id] = {workflow_id, args, status}
+const commandLog = ref([])             // [{ts, host_id, direction, line}]
+const selectedHostId = ref(null)
+const isDropdownOpen = ref(false)
+const argsInput = ref('')
+const adhocInput = ref('')
+const hostFilter = ref('')
+const loading = ref(false)
+const rangeProfileName = ref('')       // populated from /hosts response if available
+
+const MAX_LOG_LINES = 200
+
+// ---- Computed ------------------------------------------------------------
+const selectedHost = computed(() =>
+  hosts.value.find(h => h.id === selectedHostId.value) || null
+)
+
+const selectedWorkflowName = computed(() => {
+  const a = assignments[selectedHostId.value]
+  if (!a) return ''
+  const wf = workflows.value.find(w => w.id === a.workflow_id)
+  return wf ? wf.name : ''
+})
+
+const filteredHosts = computed(() => {
+  const q = hostFilter.value.trim().toLowerCase()
+  if (!q) return hosts.value
+  return hosts.value.filter(h =>
+    (h.name || '').toLowerCase().includes(q) ||
+    (h.ip || '').toLowerCase().includes(q) ||
+    (h.id || '').toLowerCase().includes(q)
+  )
+})
+
+const scopedCommandLog = computed(() =>
+  commandLog.value.filter(e => e.host_id === selectedHostId.value)
+)
+
+// ---- Helpers -------------------------------------------------------------
+function statusTagClass(status) {
+  switch (status) {
+    case 'running': return 'is-info'
+    case 'success': return 'is-success'
+    case 'error':   return 'is-danger'
+    default:        return 'is-light'
+  }
+}
+
+function formatTs(ts) {
+  try { return new Date(ts).toLocaleTimeString() } catch (_) { return '' }
+}
+
+function appendLog(host_id, direction, line) {
+  commandLog.value.push({ ts: Date.now(), host_id, direction, line })
+  if (commandLog.value.length > MAX_LOG_LINES) {
+    commandLog.value.splice(0, commandLog.value.length - MAX_LOG_LINES)
+  }
+}
+
+function ensureAssignment(host_id) {
+  if (!assignments[host_id]) {
+    assignments[host_id] = { workflow_id: null, args: '', status: 'idle' }
+  }
+  return assignments[host_id]
+}
+
+// ---- Actions -------------------------------------------------------------
+function selectHost(host_id) {
+  selectedHostId.value = host_id
+  ensureAssignment(host_id)
+  argsInput.value = assignments[host_id].args || ''
+}
+
+function assignWorkflow(wf) {
+  if (!selectedHostId.value) return
+  const a = ensureAssignment(selectedHostId.value)
+  a.workflow_id = wf.id
+}
+
+async function fetchHosts() {
+  try {
+    const res = await $api.get('/plugin/human/api/hosts')
+    hosts.value = res.data?.hosts || []
+    rangeProfileName.value = res.data?.profile || ''
+  } catch (err) {
+    console.error('fetchHosts failed', err)
+    appendLog('_system', 'stderr', `Failed to fetch hosts: ${err.message || err}`)
+  }
+}
+
+async function fetchWorkflows() {
+  try {
+    const res = await $api.get('/plugin/human/api/workflows')
+    workflows.value = res.data?.workflows || []
+  } catch (err) {
+    console.error('fetchWorkflows failed', err)
+    appendLog('_system', 'stderr', `Failed to fetch workflows: ${err.message || err}`)
+  }
+}
+
+async function refreshAll() {
+  loading.value = true
+  try {
+    await Promise.all([fetchHosts(), fetchWorkflows()])
+  } finally {
+    loading.value = false
+  }
+}
+
+async function runAssignedWorkflow() {
+  if (!selectedHostId.value) return
+  const a = ensureAssignment(selectedHostId.value)
+  if (!a.workflow_id) return
+  a.args = argsInput.value
+  a.status = 'running'
+  appendLog(selectedHostId.value, 'stdin', `[workflow] ${a.workflow_id} ${a.args}`)
+  try {
+    const res = await $api.post('/plugin/human/api/run', {
+      host_id: selectedHostId.value,
+      workflow: a.workflow_id,
+      args: a.args,
+    })
+    handleRunResponse(selectedHostId.value, res.data)
+    a.status = res.data?.status === 'error' ? 'error' : 'success'
+  } catch (err) {
+    a.status = 'error'
+    appendLog(selectedHostId.value, 'stderr', `run failed: ${err.message || err}`)
+  }
+}
+
+async function runAdhoc() {
+  if (!selectedHostId.value || !adhocInput.value.trim()) return
+  const cmd = adhocInput.value
+  appendLog(selectedHostId.value, 'stdin', cmd)
+  adhocInput.value = ''
+  try {
+    const res = await $api.post('/plugin/human/api/run', {
+      host_id: selectedHostId.value,
+      workflow: null,
+      args: cmd,
+    })
+    handleRunResponse(selectedHostId.value, res.data)
+  } catch (err) {
+    appendLog(selectedHostId.value, 'stderr', `adhoc failed: ${err.message || err}`)
+  }
+}
+
+function handleRunResponse(host_id, data) {
+  if (!data) {
+    appendLog(host_id, 'stdout', '(no response body)')
+    return
+  }
+  // Backend currently echoes; later it will return {stdout, stderr, status}.
+  if (data.stdout) {
+    String(data.stdout).split('\n').forEach(l => appendLog(host_id, 'stdout', l))
+  }
+  if (data.stderr) {
+    String(data.stderr).split('\n').forEach(l => appendLog(host_id, 'stderr', l))
+  }
+  if (!data.stdout && !data.stderr) {
+    appendLog(host_id, 'stdout', JSON.stringify(data))
+  }
+}
+
+// ---- Lifecycle -----------------------------------------------------------
+onMounted(() => {
+  refreshAll()
+})
 </script>
 
 <style scoped>
-.section-profile ul {
-  list-style-type: none;
+.human-live {
+  padding: 1rem;
 }
 
-.section-profile li {
-  text-align: left;
-}
-
-.row {
-  text-align: center;
-  padding: 25px;
-  border-radius: 25px;
-  width: 95%;
+.human-header {
   display: flex;
-  position: relative;
-  border: 2px solid var(--navbar-color);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #333;
+  padding-bottom: 0.5rem;
 }
 
-.transparent-row {
-  margin-top: 50px;
-  text-align: center;
-  background-color: transparent;
-  background-size: cover;
-  padding: 25px;
-  width: 95%;
-  display: flex;
-  position: relative;
+.human-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1.2fr;
+  gap: 1rem;
+  min-height: 70vh;
 }
 
-.inner-row {
-  border: none;
+.hosts-panel,
+.command-stream,
+.gui-viewer {
+  background-color: #1e1e1e;
+  border: 1px solid #2c2c2c;
+  border-radius: 6px;
+  padding: 0.75rem;
+  overflow: auto;
 }
 
-.row-simple {
-  width: 95%;
-  display: flex;
-  position: relative;
-}
-
-.column {
-  flex: 50%;
-  color: var(--font-color);
-  margin: 30px;
-  max-width: 100%;
-}
-:root {
-  --default-font: "Veranda", sans-serif;
-  --theme-color: white;
-  --primary-background: black;
-  --secondary-background: #1e1e1e;
-  --section-background: #1e1e1e;
-  --font-color: white;
-  --invert-percentage: 100%;
-  --secondary-font-color: firebrick;
-}
-
-.row .row-interior {
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: none;
-}
-.column .column-interior {
-  background-color: black;
-  padding: 25px;
-  border-radius: 25px;
-  margin-bottom: 0;
-  margin-top: 0;
-}
-
-.human-box h4 {
-  font-size: 20px;
-  text-align: left;
-}
-
-.human-basic hr {
-  opacity: 0.25;
-}
-
-.human-box hr {
-  margin: 30px 0;
-}
-
-.human-box table {
-  width: 100%;
-}
-
-.human-box table p {
-  font-family: var(--default-font);
-  font-size: 14px;
-  font-weight: 700;
-}
-.human-box input[type="text"] {
-  width: 100%;
-  margin-top: 0;
-}
-.human-box select {
-  width: 100%;
-}
-
-.human-box ul {
-  padding-inline-start: 20px;
-}
-.human-box input[type="number"] {
-  position: relative;
-  width: 50px;
+.hosts-list {
+  list-style: none;
   padding: 0;
   margin: 0;
 }
 
-.human-box input[type="range"] ::before {
-  display: none;
+.hosts-list li {
+  padding: 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
 }
 
-.human-header-list {
-  list-style-position: inside;
+.hosts-list li:hover {
+  background-color: #2a2a2a;
+}
+
+.hosts-list li.is-selected {
+  background-color: #2a2a2a;
+  border-color: #485fc7;
+}
+
+.host-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.host-meta {
+  color: #888;
+}
+
+.io-panel {
+  margin-top: 1rem;
+}
+
+.io-log {
+  background-color: #0e0e0e;
+  color: #ddd;
+  padding: 0.75rem;
+  height: 30vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.io-stdin  { color: #80a0ff; }
+.io-stdout { color: #c8c8c8; }
+.io-stderr { color: #ff8080; }
+
+.todo-panel {
+  border: 2px dashed #666;
+  border-radius: 6px;
+  padding: 1rem;
   text-align: center;
-  display: inline-block;
-}
-.install-container {
-  position: relative;
-}
-.install-container .background-text {
-  position: absolute;
-  color: #f1f1f1;
-  font-size: 40px;
-  bottom: 10px;
-  opacity: 30%;
+  margin-top: 1rem;
 }
 
-.install-container span {
-  font-size: 14px;
-  line-height: 22px;
+.vnc-wrapper {
+  width: 100%;
+  height: 60vh;
 }
 
-.duk-table-icon img {
-  margin: 0;
-}
-
-#command-button {
-  display: inline-block;
-  background-color: black;
-  color: var(--font-color);
-  height: 25px;
-  width: 50%;
+.vnc-frame {
+  width: 100%;
+  height: 100%;
   border: none;
-  margin: 5px;
-  cursor: pointer;
 }
 
-.delete-command {
-  flex: 10%;
-  color: red;
-  cursor: pointer;
-  font-size: 22px;
+.dropdown.is-fullwidth,
+.dropdown-menu.is-fullwidth {
+  width: 100%;
 }
 </style>
-
-<script>
-import { toast } from "bulma-toast";
-
-export default {
-  inject: ["$api"],
-  data() {
-    return {
-      workflows: null,
-      selectedWorkflows: [],
-      commands: [],
-      humans: [],
-      selectedHuman: -1,
-      humanName: "",
-      selectedPlatform: "",
-      serverIp: "",
-      sleepInterval: 10,
-      clusterSleepInterval: 500,
-      tasksPerCluster: 5,
-      commandBlock: "",
-    };
-  },
-  created() {
-    this.initHuman();
-  },
-  watch: {
-    selectedHuman: "renderCommandBlock",
-    serverIp: "renderCommandBlock",
-  },
-  methods: {
-    initHuman() {
-      this.serverIp = `${window.location.protocol}//${window.location.hostname}:${window.location.port}`;
-
-      this.$api
-        .get("/plugin/human/workflows")
-        .then((workflows) => {
-          this.workflows = workflows.data;
-          return this.$api.get("/plugin/human/humans");
-        })
-        .then((humans) => {
-          this.humans = humans.data;
-        })
-        .catch((error) => {
-          console.error(error);
-          toast({
-            message: "Error loading workflows",
-            position: "bottom-right",
-            type: "is-warning",
-            dismissible: true,
-            pauseOnHover: true,
-            duration: 2000,
-          });
-        });
-    },
-    generateHuman2() {
-      if (!this.humanName) {
-        toast({
-          message: "Please enter a name for the human",
-          position: "bottom-right",
-          type: "is-warning",
-          dismissible: true,
-          pauseOnHover: true,
-          duration: 2000,
-        });
-        return;
-      }
-
-      const validPlatforms = ["linux", "windows-psh", "darwin"];
-      if (!validPlatforms.includes(this.selectedPlatform)) {
-        toast({
-          message: "Please select a valid platform",
-          position: "bottom-right",
-          type: "is-warning",
-          dismissible: true,
-          pauseOnHover: true,
-          duration: 2000,
-        });
-        return;
-      }
-
-      if (this.selectedWorkflows.length === 0) {
-        toast({
-          message: "Please select at least one workflow",
-          position: "bottom-right",
-          type: "is-warning",
-          dismissible: true,
-          pauseOnHover: true,
-          duration: 2000,
-        });
-        return;
-      }
-
-      const payload = {
-        index: "build_human",
-        platform: this.selectedPlatform,
-        name: this.humanName,
-        task_cluster_interval: this.clusterSleepInterval,
-        task_interval: this.sleepInterval,
-        task_count: this.tasksPerCluster,
-        tasks: this.selectedWorkflows,
-        extra: this.commands,
-      };
-
-      this.$api
-        .post("/plugin/human/api", payload)
-        .then((response) => {
-          this.humans.push(response.data);
-          this.selectedHuman = this.humans.length - 1;
-          this.humanName = "";
-          this.selectedPlatform = "";
-          this.selectedWorkflows = [];
-          this.commands = [];
-          toast({
-            message: "Human created",
-            position: "bottom-right",
-            type: "is-success",
-            dismissible: true,
-            pauseOnHover: true,
-            duration: 2000,
-          });
-        })
-        .catch((error) => {
-          console.error(error);
-          toast({
-            message: "Error creating human",
-            position: "bottom-right",
-            type: "is-warning",
-            dismissible: true,
-            pauseOnHover: true,
-            duration: 2000,
-          });
-        });
-    },
-    copyCommand() {
-      navigator.clipboard.writeText(this.commandBlock).then(() => {
-        toast({
-          message: "Copied to clipboard",
-          position: "bottom-right",
-          type: "is-success",
-          dismissible: true,
-          pauseOnHover: true,
-          duration: 2000,
-        });
-      });
-    },
-    renderCommandBlock() {
-      if (!this.humans[this.selectedHuman]) {
-        this.commandBlock = ``;
-        return;
-      }
-      const extra = this.formatExtra(
-        this.humans[this.selectedHuman].extra,
-        this.humans[this.selectedHuman].platform
-      );
-      switch (this.humans[this.selectedHuman].platform) {
-        case "darwin":
-        case "linux":
-          this.commandBlock = `curl -sk -o '${
-            this.humans[this.selectedHuman].name
-          }.tar.gz' -X POST -H 'file:${
-            this.humans[this.selectedHuman].name
-          }.tar.gz' ${this.serverIp}/file/download 2>&1 && mkdir '${
-            this.humans[this.selectedHuman].name
-          }' && tar -C '${this.humans[this.selectedHuman].name}' -zxvf '${
-            this.humans[this.selectedHuman].name
-          }.tar.gz' && virtualenv -p python3 '${
-            this.humans[this.selectedHuman].name
-          }' && '${this.humans[this.selectedHuman].name}/bin/pip' install -r '${
-            this.humans[this.selectedHuman].name
-          }/requirements.txt' && '${
-            this.humans[this.selectedHuman].name
-          }/bin/python' '${
-            this.humans[this.selectedHuman].name
-          }/human.py' --clustersize ${
-            this.humans[this.selectedHuman].tasks_per_cluster
-          } --taskinterval ${
-            this.humans[this.selectedHuman].task_interval
-          } --taskgroupinterval ${
-            this.humans[this.selectedHuman].task_cluster_interval
-          } --extra ${extra}`;
-          break;
-        case "windows-psh":
-          this.commandBlock = `$server='${
-            this.serverIp
-          }'; $url="$server/file/download"; $wc=New-Object System.Net.WebClient; $wc.Headers.add("file","${
-            this.humans[this.selectedHuman].name
-          }.zip"); $wc.DownloadFile($url, "$pwd\\${
-            this.humans[this.selectedHuman].name
-          }.zip"); Expand-Archive "${
-            this.humans[this.selectedHuman].name
-          }.zip" -DestinationPath "${
-            this.humans[this.selectedHuman].name
-          }" -Force; python.exe -m venv "${
-            this.humans[this.selectedHuman].name
-          }"; Start-Process -FilePath ".\\${
-            this.humans[this.selectedHuman].name
-          }\\Scripts\\pip.exe" -ArgumentList "install -r ${
-            this.humans[this.selectedHuman].name
-          }\\requirements.txt" -Wait; Start-Process -FilePath ".\\\\${
-            this.humans[this.selectedHuman].name
-          }\\\\Scripts\\\\python.exe" -ArgumentList "${
-            this.humans[this.selectedHuman].name
-          }/human.py' --clustersize ${
-            this.humans[this.selectedHuman].tasks_per_cluster
-          } --taskinterval ${
-            this.humans[this.selectedHuman].task_interval
-          } --taskgroupinterval ${
-            this.humans[this.selectedHuman].task_cluster_interval
-          } --extra ${extra}"`;
-          break;
-      }
-    },
-    formatExtra(extra, platform) {
-      let formatted_commands = "";
-      extra.forEach((command) => {
-        switch (platform) {
-          case "darwin":
-          case "linux":
-            command = command.replace(/\\/g, "\\\\");
-            command = command.replace(/"/g, '\\"');
-            break;
-        }
-        formatted_commands += '"' + command + '" ';
-      });
-      return formatted_commands;
-    },
-  },
-};
-</script>
-
-<template lang="pug">
-div
-  #human-section-1.section-profile
-    .row
-      .column.section-border(style="flex: 25%; text-align: left; padding: 15px")
-        h1(style="font-size: 70px; margin-top: -20px") Human
-        h2 emulate human behavior
-        p This plugin allows you to design a human that will emulate user behavior on an endpoint. Use the following instructions to build and deploy your own human.
-        br
-      .column(style="flex: 75%; margin-right: -25px; align-items: stretch; display: flex;")
-        .row.row-interior.install-list
-          .column.column-interior.install-container(style="text-align: left; flex: 25%")
-            .background-text 1
-            span Install Python3 on the target workstation
-
-          .column.column-interior.install-container(style="text-align: left; flex: 25%")
-            .background-text 2
-            span Install Python3 Virtualenv on the target workstation
-
-          .column.column-interior.install-container(style="text-align: left; flex: 25%")
-            .background-text 3
-            span Install Chrome on the target workstation
-
-          .column.column-interior.install-container(style="text-align: left; flex: 25%")
-            .background-text 4
-            span Build a human below and run the download cradle on the target workstation
-
-  #human-section-2.section-profile.human-basic
-    .row
-      .topright.duk-icon
-      .column.section-border(style="flex: 25%; text-align: left; padding: 15px")
-        h1#human-name-header(style="font-size: 70px; margin-top: -20px") {{ humans[selectedHuman] ? humans[selectedHuman].name : 'Name...' }}
-        h2 build your human
-        p Design and generate your human here, or select a pre-existing human to deploy. Use the download command to install and start your human.
-        br
-      .column(style="flex: 75%; text-align: left; margin-right: -25px;")
-        .row.row-interior
-          #behavior-options.column.column-interior.human-box
-            table
-              tr
-                td Name:
-                td
-                  input(v-model="humanName", id="human-name", type="text", placeholder="Enter human's name...")
-              tr
-                td Platform:
-                td
-                  select(v-model="selectedPlatform", id="base-platform")
-                      option(value="", disabled) Select target OS
-                      option(value="darwin") MacOS
-                      option(value="linux") Linux
-                      option(value="windows-psh") Windows (PowerShell)
-            hr
-            h4 Select your human's behaviors:
-            ul#human-tasks
-              li(v-for="workflow in workflows" :key="workflow.name")
-                input(type="checkbox", :value="workflow.name", v-model="selectedWorkflows")
-                span {{ workflow.description }}
-            hr
-            h4 Custom Commands:
-            button#append-command.command-button.atomic-button(style="width: 30%; background-color: green") Add Command
-            button#clear-commands.command-button.atomic-button(style="width: 30%; background-color: firebrick") Clear Commands
-            br
-            br
-            #input-command
-            // Place holder for appended custom commands
-            hr
-            h4 Human behavior configuration:
-            table
-              tr
-                td
-                  p Task Sleep Interval
-                td
-                  div
-                      input(v-model="sleepInterval", class="queueOption", type="range", min="5", max="50", id="human-task-interval", name="human-task-interval")
-                td
-                  input(v-model="sleepInterval", type="number", id="human-task-interval-text")
-              tr
-                td
-                  p Task Cluster Sleep Interval
-                td
-                  input(v-model="clusterSleepInterval", class="queueOption", type="range", min="5", max="1000", id="human-cluster-interval", name="human-cluster-interval")
-                td
-                  input(v-model="clusterSleepInterval", type="number", id="human-cluster-interval-text")
-              tr
-                td
-                  p Tasks per Cluster
-                td
-                  input(v-model="tasksPerCluster", class="queueOption", type="range", min="1", max="20", id="human-task-count", name="human-task-count")
-                td
-                  input(v-model="tasksPerCluster", type="number", id="human-task-count-text")
-            button#generateLayer.button-success(type="button", v-on:click="generateHuman2()") Generate Human
-            #human-built
-              span#message
-          .column.column-interior.human-box(style="text-align: left")
-            table
-              tr
-                td
-                  p Caldera Server IP:
-                td
-                  input(v-model="serverIp", id="server-ip", type="text", placeholder="http://localhost:3000")
-              tr
-                td
-                  p Select existing human:
-                td
-                  select(v-model="selectedHuman", style="width: 100%; margin-left: 0")
-                    option(value=-1, disabled) Select existing human...
-                    template(v-for="(h, index) in humans")
-                      option(:value="index", :id="'human-' + h.name") {{ h.name }}
-            hr
-            .box.container
-              a.button.is-small.is-outlined.cmd-copy-button(v-on:click="copyCommand()")
-                span.icon
-                  i.far.fa-lg.fa-copy
-                span Copy
-              br
-              br
-              code#delivery-commands(style="text-align: left; font-size: 14px") {{ commandBlock }}
-</template>

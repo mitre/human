@@ -15,8 +15,16 @@ async def enable(services):
     human_svc = HumanService(services=services)
     await human_svc.load_available_workflows()
     human_api = HumanApi(services=services, human_svc=human_svc)
+
+    # Splash + legacy cradle-builder routes (kept for backwards compat)
     app.router.add_route('GET', '/plugin/human/gui', human_api.splash)
-    app.router.add_route('*', '/plugin/human/api', human_api.rest_api)
+    app.router.add_route('*',   '/plugin/human/api', human_api.rest_api)
     app.router.add_route('GET', '/plugin/human/workflows', human_api.human_workflows)
     app.router.add_route('GET', '/plugin/human/humans', human_api.human_humans)
+
+    # Timestone live-UI routes
+    app.router.add_route('GET',  '/plugin/human/api/hosts',     human_api.api_hosts)
+    app.router.add_route('GET',  '/plugin/human/api/workflows', human_api.api_workflows)
+    app.router.add_route('POST', '/plugin/human/api/run',       human_api.api_run)
+
     app.router.add_static('/human', 'plugins/human/static', append_version=True)

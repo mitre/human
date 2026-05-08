@@ -39,6 +39,120 @@ class HumanService(BaseService):
             if os.path.isfile(os.path.join(root, f)) and not f[0] == '_':
                 await self._load_workflow_module(root, f)
 
+    # ------------------------------------------------------------------ #
+    # Timestone live-UI helpers                                           #
+    # ------------------------------------------------------------------ #
+
+    async def list_range_hosts(self):
+        """Return the active range's host inventory.
+
+        TODO: replace the stub with a real lookup against the Range plugin.
+        Two reasonable paths once the contract is firm:
+          1. Pull from the Range plugin's in-process data store (e.g. via
+             `self.data_svc.locate('range_instances')` if the Range plugin
+             registers under data_svc).
+          2. Use an internal HTTP call against the routes registered in
+             plugins/range/hook.py (`POST /plugin/range/onprem/hosts`,
+             `POST /plugin/range/cloud/inventory`, ...).
+        For now we hand back a deterministic stub so the Vue layer has
+        something to render.
+        """
+        try:
+            services = self.get_services() if hasattr(self, 'get_services') else None
+        except Exception:
+            services = None
+
+        # If the Range plugin ever exposes hosts through data_svc, prefer that.
+        try:
+            range_hosts = await self.data_svc.locate('range_instances')
+            if range_hosts:
+                return {
+                    'profile': '(active range)',
+                    'hosts': [self._normalize_range_host(h) for h in range_hosts],
+                }
+        except Exception:
+            # data_svc.locate raises for unknown collections; that's fine,
+            # it just means the Range plugin hasn't published anything we
+            # can read directly. Fall through to the stub.
+            pass
+
+        return {
+            'profile': '(stub)',
+            'hosts': [
+                {'id': 'host-stub-1', 'name': 'microvm-1', 'ip': '10.0.0.11',
+                 'status': 'unknown', 'vnc_ws': None},
+                {'id': 'host-stub-2', 'name': 'microvm-2', 'ip': '10.0.0.12',
+                 'status': 'unknown', 'vnc_ws': None},
+            ],
+        }
+
+    async def list_live_workflows(self):
+        """Return workflows that the control_server can execute.
+
+        TODO: forward to control_server.py's `_list` JSON-RPC method.
+        For now we return a small hardcoded set plus everything we have
+        loaded from the legacy pyhuman workflow modules so the picker is
+        not empty.
+        """
+        live = [
+            {'id': 'idle_browse', 'name': 'Idle Browse',
+             'description': 'Open a few benign URLs in a real browser.'},
+            {'id': 'office_open', 'name': 'Office Open',
+             'description': 'Open and edit a document for N seconds.'},
+            {'id': 'shell_noop',  'name': 'Shell No-op',
+             'description': 'Run a benign shell command (echo / sleep).'},
+        ]
+        try:
+            legacy = await self.data_svc.locate('workflows')
+            for w in legacy:
+                disp = getattr(w, 'display', None) or {}
+                name = disp.get('name') or getattr(w, 'name', None)
+                if not name:
+                    continue
+                live.append({
+                    'id': name,
+                    'name': name,
+                    'description': disp.get('description')
+                                   or getattr(w, 'description', '') or '',
+                })
+        except Exception:
+            pass
+        return {'workflows': live}
+
+    async def dispatch_run(self, body):
+        """Dispatch a workflow/ad-hoc to a host.
+
+        TODO: forward to control_server.py's per-host JSON-RPC channel and
+        stream stdout/stderr back. For now this just echoes so the UI's
+        live-log loop can be exercised end-to-end without the transport.
+        """
+        host_id = body.get('host_id') or '(unset)'
+        workflow = body.get('workflow')
+        args = body.get('args') or ''
+        if workflow:
+            line = f"echo: would run workflow '{workflow}' on {host_id} args={args!r}"
+        else:
+            line = f"echo: would run ad-hoc on {host_id}: {args}"
+        return {
+            'status': 'success',
+            'host_id': host_id,
+            'workflow': workflow,
+            'stdout': line,
+            'stderr': '',
+        }
+
+    @staticmethod
+    def _normalize_range_host(h):
+        """Coerce whatever the Range plugin gives us into the shape the UI wants."""
+        disp = getattr(h, 'display', h) if not isinstance(h, dict) else h
+        return {
+            'id':      disp.get('id')    or disp.get('uuid') or disp.get('name'),
+            'name':    disp.get('name')  or disp.get('hostname') or disp.get('id'),
+            'ip':      disp.get('ip')    or disp.get('private_ip') or disp.get('public_ip') or '',
+            'status':  disp.get('status') or 'unknown',
+            'vnc_ws':  disp.get('vnc_ws') or None,
+        }
+
     """ PRIVATE """
 
     async def _load_workflow_module(self, root, workflow_file):
