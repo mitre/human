@@ -1,7 +1,7 @@
 <template>
   <div class="human-live">
     <!-- HEADER ============================================================ -->
-    <section class="human-header">
+    <section class="human-header mb-2">
       <h2 class="title is-4">
         Human (Live)
         <span class="subtitle is-6 ml-2" v-if="rangeProfileName">
@@ -9,11 +9,11 @@
         </span>
       </h2>
       <div class="is-flex is-align-items-center">
-        <button class="button is-small is-light mr-2" @click="refreshAll" :disabled="loading">
+        <button class="button is-dark is-small mr-2" @click="refreshAll" :disabled="loading">
           <span class="icon is-small"><i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i></span>
           <span>Refresh</span>
         </button>
-        <button class="button is-small is-light" @click="commandLog = []">
+        <button class="button is-dark is-small" @click="commandLog = []">
           <span class="icon is-small"><i class="fas fa-trash"></i></span>
           <span>Clear log</span>
         </button>
@@ -58,7 +58,7 @@
 
       <!-- COMMAND STREAM (center) ========================================= -->
       <main class="command-stream">
-        <div v-if="!selectedHost" class="has-text-centered has-text-grey-light pt-6">
+        <div v-if="!selectedHost" class="notification is-dark has-text-centered">
           <p><em>Select a host on the left to assign workflows or send commands.</em></p>
         </div>
 
@@ -86,7 +86,7 @@
                   </span>
                 </button>
               </div>
-              <div class="dropdown-menu" id="workflow-dropdown-menu" role="menu">
+              <div class="dropdown-menu is-fullwidth" id="workflow-dropdown-menu" role="menu">
                 <div class="dropdown-content">
                   <a
                     class="dropdown-item"
@@ -96,7 +96,7 @@
                     @click="assignWorkflow(wf); isDropdownOpen = false"
                   >
                     <strong>{{ wf.name }}</strong>
-                    <p class="has-text-grey is-size-7">{{ wf.description }}</p>
+                    <p class="is-size-7">{{ wf.description }}</p>
                   </a>
                   <p
                     class="has-text-centered"
@@ -115,7 +115,7 @@
             <div class="field has-addons">
               <div class="control is-expanded">
                 <input
-                  class="input"
+                  class="input is-small"
                   type="text"
                   placeholder="--flag value ..."
                   v-model="argsInput"
@@ -124,7 +124,7 @@
               </div>
               <div class="control">
                 <button
-                  class="button is-primary"
+                  class="button is-dark is-small"
                   :disabled="!assignments[selectedHostId]?.workflow_id"
                   @click="runAssignedWorkflow"
                 >
@@ -140,7 +140,7 @@
             <div class="field has-addons">
               <div class="control is-expanded">
                 <input
-                  class="input"
+                  class="input is-small"
                   type="text"
                   placeholder="raw command line..."
                   v-model="adhocInput"
@@ -148,7 +148,7 @@
                 />
               </div>
               <div class="control">
-                <button class="button is-link" @click="runAdhoc" :disabled="!adhocInput.trim()">
+                <button class="button is-dark is-small" @click="runAdhoc" :disabled="!adhocInput.trim()">
                   Send
                 </button>
               </div>
@@ -179,13 +179,13 @@
         <div v-if="selectedHost && selectedHost.vnc_ws" class="vnc-wrapper">
           <iframe :src="selectedHost.vnc_ws" class="vnc-frame"></iframe>
         </div>
-        <div v-else class="todo-panel">
-          <p class="has-text-grey">
+        <div v-else class="notification is-dark todo-panel">
+          <p>
             <strong>TODO:</strong> noVNC iframe slot. Will embed a websocket
             stream once <code>control_server.py</code> exposes a per-host
             VNC bridge.
           </p>
-          <p class="has-text-grey-light is-size-7 mt-2">
+          <p class="is-size-7 mt-2">
             Selected host: <code>{{ selectedHost?.id || '—' }}</code>
           </p>
         </div>
@@ -374,6 +374,13 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Palette mirrors plugins/range/gui/range.css and Caldera-core:
+     panel bg     #272727
+     panel hover  #1b1b1b
+     muted text   #939393
+     accent blue  #191970
+     accent red   #8B0000
+*/
 .human-live {
   padding: 1rem;
 }
@@ -382,8 +389,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1rem;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #555;
   padding-bottom: 0.5rem;
 }
 
@@ -397,9 +403,9 @@ onMounted(() => {
 .hosts-panel,
 .command-stream,
 .gui-viewer {
-  background-color: #1e1e1e;
-  border: 1px solid #2c2c2c;
-  border-radius: 6px;
+  background-color: #272727;
+  border: 1px solid #939393;
+  border-radius: 4px;
   padding: 0.75rem;
   overflow: auto;
 }
@@ -418,12 +424,12 @@ onMounted(() => {
 }
 
 .hosts-list li:hover {
-  background-color: #2a2a2a;
+  background-color: #1b1b1b;
 }
 
 .hosts-list li.is-selected {
-  background-color: #2a2a2a;
-  border-color: #485fc7;
+  background-color: #1b1b1b;
+  border-color: #191970;
 }
 
 .host-row {
@@ -433,7 +439,7 @@ onMounted(() => {
 }
 
 .host-meta {
-  color: #888;
+  color: #939393;
 }
 
 .io-panel {
@@ -441,25 +447,23 @@ onMounted(() => {
 }
 
 .io-log {
-  background-color: #0e0e0e;
-  color: #ddd;
-  padding: 0.75rem;
+  background-color: #1b1b1b;
+  color: #939393;
+  padding: 10px;
   height: 30vh;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: 7px;
+  font-family: monospace;
+  font-size: 0.8em;
 }
 
-.io-stdin  { color: #80a0ff; }
-.io-stdout { color: #c8c8c8; }
-.io-stderr { color: #ff8080; }
+.io-stdin  { color: #ffffff; }
+.io-stdout { color: #939393; }
+.io-stderr { color: #8B0000; }
 
 .todo-panel {
-  border: 2px dashed #666;
-  border-radius: 6px;
-  padding: 1rem;
   text-align: center;
   margin-top: 1rem;
 }
