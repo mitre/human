@@ -59,15 +59,15 @@
       <!-- COMMAND STREAM (center) ========================================= -->
       <main class="command-stream">
         <div v-if="!selectedHost" class="notification is-dark has-text-centered">
-          <p><em>Select a host on the left to assign workflows or send commands.</em></p>
+          <p><em>Select a host on the left to assign human abilities or send commands.</em></p>
         </div>
 
         <div v-else>
           <h3 class="title is-5">{{ selectedHost.name || selectedHost.id }}</h3>
 
-          <!-- Workflow dropdown (mirrors range.vue:27-56 pattern) -->
+          <!-- Human-ability dropdown (mirrors range.vue:27-56 pattern) -->
           <div class="field">
-            <label class="label is-small">Workflow</label>
+            <label class="label is-small">Human Ability</label>
             <div
               class="dropdown searchable is-flex-grow-1"
               :class="{ 'is-active': isDropdownOpen }"
@@ -80,7 +80,7 @@
                   aria-controls="workflow-dropdown-menu"
                   @click="isDropdownOpen = !isDropdownOpen"
                 >
-                  <span>{{ selectedWorkflowName || 'Select Workflow' }}</span>
+                  <span>{{ selectedWorkflowName || 'Select Human Ability' }}</span>
                   <span class="icon is-small">
                     <i class="fas fa-angle-down"></i>
                   </span>
@@ -102,7 +102,7 @@
                     class="has-text-centered"
                     v-if="workflows.length === 0"
                   >
-                    No workflows available
+                    No human abilities available
                   </p>
                 </div>
               </div>
@@ -111,7 +111,7 @@
 
           <!-- Args + Run -->
           <div class="field">
-            <label class="label is-small">Args (passed to workflow)</label>
+            <label class="label is-small">Args (passed to human ability)</label>
             <div class="field has-addons">
               <div class="control is-expanded">
                 <input
@@ -318,7 +318,7 @@ async function runAssignedWorkflow() {
   if (!a.workflow_id) return
   a.args = argsInput.value
   a.status = 'running'
-  appendLog(selectedHostId.value, 'stdin', `[workflow] ${a.workflow_id} ${a.args}`)
+  appendLog(selectedHostId.value, 'stdin', `[human-ability] ${a.workflow_id} ${a.args}`)
   try {
     const res = await $api.post('/plugin/human/api/run', {
       host_id: selectedHostId.value,
