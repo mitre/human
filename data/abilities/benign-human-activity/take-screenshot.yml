@@ -1,0 +1,58 @@
+---
+
+- id: c8d08bee-9b4c-42fc-bf58-013f051d39d5
+  name: Take Screenshot
+  description: Simulates a user grabbing a screenshot for a ticket or doc.
+    On Windows uses System.Windows.Forms / System.Drawing to capture the
+    primary screen and save to %TEMP% if the assemblies load (most desktop
+    SKUs); falls back to nircmd if installed; otherwise logs and skips. On
+    Linux uses gnome-screenshot or scrot if present; skips clean otherwise.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_screenshot
+    name: Benign User Activity - Screenshot
+  platforms:
+    windows:
+      psh:
+        command: |
+          $out = Join-Path $env:TEMP ("screen-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".png")
+          try {
+            Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+            Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+            $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+            $bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose(); $bmp.Dispose()
+            Write-Output "saved $out"
+          } catch {
+            $nircmd = Get-Command nircmd.exe -ErrorAction SilentlyContinue
+            if ($nircmd) {
+              & nircmd.exe savescreenshot $out
+              Write-Output "saved via nircmd $out"
+            } else {
+              Write-Output "screenshot tooling unavailable; skipping"
+            }
+          }
+    linux:
+      sh:
+        command: |
+          OUT="/tmp/screen-$(date +%Y%m%d-%H%M%S).png"
+          if command -v gnome-screenshot >/dev/null 2>&1; then
+            gnome-screenshot -f "$OUT" >/dev/null 2>&1 && echo "saved $OUT" || echo "screenshot failed"
+          elif command -v scrot >/dev/null 2>&1; then
+            scrot "$OUT" >/dev/null 2>&1 && echo "saved $OUT" || echo "screenshot failed"
+          else
+            echo "no screenshot tool available; skipping"
+          fi
+    darwin:
+      sh:
+        command: |
+          OUT="/tmp/screen-$(date +%Y%m%d-%H%M%S).png"
+          if command -v screencapture >/dev/null 2>&1; then
+            screencapture -x "$OUT" >/dev/null 2>&1 || true
+          fi
+  additional_info:
+    human: true
+    benign: true

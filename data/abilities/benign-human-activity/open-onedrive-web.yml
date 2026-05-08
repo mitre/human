@@ -1,0 +1,34 @@
+---
+
+- id: ca4716e0-2c7c-40ef-931c-4158b8d67cbb
+  name: Open OneDrive (Web)
+  description: Simulates a user popping into OneDrive to grab a file. Opens
+    the OneDrive web UI in the default browser. Common pattern for office
+    workers especially in Microsoft-prevalent enterprises.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_onedrive
+    name: Benign User Activity - Cloud Storage
+  platforms:
+    windows:
+      psh:
+        command: |
+          Start-Process "https://onedrive.live.com"
+          Start-Sleep -Seconds 4
+    linux:
+      sh:
+        command: |
+          if command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "https://onedrive.live.com" >/dev/null 2>&1 &
+          else
+            echo "no browser launcher available; skipping"
+          fi
+          sleep 4
+    darwin:
+      sh:
+        command: |
+          open "https://onedrive.live.com"
+          sleep 4
+  additional_info:
+    human: true
+    benign: true

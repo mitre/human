@@ -1,0 +1,39 @@
+---
+
+- id: fb1b7146-d9d6-4957-9e51-b7726cd608db
+  name: Open Calendar (App or Web)
+  description: Simulates a user checking today's meetings. On Windows tries
+    the outlookcal: URI to launch Outlook calendar, falling back to the Outlook
+    Live calendar in browser. On Linux opens Google Calendar in the browser.
+    Persona-realistic morning step.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_calendar
+    name: Benign User Activity - Calendar
+  platforms:
+    windows:
+      psh:
+        command: |
+          try {
+            Start-Process "outlookcal:" -ErrorAction Stop
+          } catch {
+            Start-Process "https://outlook.live.com/calendar/0/view/week"
+          }
+          Start-Sleep -Seconds 4
+    linux:
+      sh:
+        command: |
+          if command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "https://calendar.google.com" >/dev/null 2>&1 &
+          else
+            echo "no browser launcher available; skipping"
+          fi
+          sleep 4
+    darwin:
+      sh:
+        command: |
+          open "https://calendar.google.com"
+          sleep 4
+  additional_info:
+    human: true
+    benign: true

@@ -1,0 +1,39 @@
+---
+
+- id: a82d9de2-75f2-4759-bfe3-0b3696c759da
+  name: Open Teams (App or Web)
+  description: Simulates a user opening Microsoft Teams to check chats. On
+    Windows tries the msteams: URI handler first, then falls back to opening
+    teams.microsoft.com in the default browser. On Linux opens the Teams web
+    client via xdg-open. Pure shell, no automation interactions inside the app.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_teams
+    name: Benign User Activity - Teams / IM
+  platforms:
+    windows:
+      psh:
+        command: |
+          try {
+            Start-Process "msteams:" -ErrorAction Stop
+          } catch {
+            Start-Process "https://teams.microsoft.com"
+          }
+          Start-Sleep -Seconds 5
+    linux:
+      sh:
+        command: |
+          if command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "https://teams.microsoft.com" >/dev/null 2>&1 &
+          else
+            echo "no browser launcher available; skipping"
+          fi
+          sleep 5
+    darwin:
+      sh:
+        command: |
+          open "https://teams.microsoft.com"
+          sleep 5
+  additional_info:
+    human: true
+    benign: true

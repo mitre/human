@@ -1,0 +1,64 @@
+---
+
+- id: 8d79ec30-32c5-4739-80e5-c3daac419c13
+  name: Crawl Site (Shallow)
+  description: Simulates a user reading a page and following a couple of links
+    by hand. Uses curl/Invoke-WebRequest to GET a seed page, greps a few hrefs,
+    and fetches up to two of them. Saves payloads to TEMP / /tmp. Generates
+    plausible browse-and-click HTTP/DNS patterns without launching a real
+    browser.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_crawl
+    name: Benign User Activity - Shallow Crawl
+  platforms:
+    windows:
+      psh:
+        command: |
+          $seed = "https://example.com"
+          $base = Join-Path $env:TEMP ("crawl-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+          New-Item -ItemType Directory -Path $base -Force | Out-Null
+          try {
+            $resp = Invoke-WebRequest -Uri $seed -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+            $resp.Content | Set-Content -Path (Join-Path $base "seed.html")
+            $links = ($resp.Content | Select-String -Pattern 'href="(https?://[^"]+)"' -AllMatches).Matches | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique -First 2
+            $i = 0
+            foreach ($l in $links) {
+              $i++
+              try {
+                Invoke-WebRequest -Uri $l -UseBasicParsing -TimeoutSec 10 -OutFile (Join-Path $base "link$i.html") -ErrorAction Stop
+              } catch {}
+              Start-Sleep -Seconds 2
+            }
+            Write-Output "crawl saved to $base"
+          } catch {
+            Write-Output "crawl failed: $_"
+          }
+    linux:
+      sh:
+        command: |
+          if ! command -v curl >/dev/null 2>&1; then
+            echo "curl not available; skipping"
+            exit 0
+          fi
+          BASE="/tmp/crawl-$(date +%Y%m%d-%H%M%S)"
+          mkdir -p "$BASE"
+          SEED="https://example.com"
+          curl -sk --max-time 10 "$SEED" -o "$BASE/seed.html" || true
+          LINKS=$(grep -oE 'href="https?://[^"]+"' "$BASE/seed.html" 2>/dev/null | sed -E 's/href="([^"]+)"/\1/' | sort -u | head -n 2)
+          i=0
+          for L in $LINKS; do
+            i=$((i+1))
+            curl -sk --max-time 10 "$L" -o "$BASE/link$i.html" || true
+            sleep 2
+          done
+          echo "crawl saved to $BASE"
+    darwin:
+      sh:
+        command: |
+          BASE="/tmp/crawl-$(date +%Y%m%d-%H%M%S)"
+          mkdir -p "$BASE"
+          curl -sk --max-time 10 https://example.com -o "$BASE/seed.html" || true
+  additional_info:
+    human: true
+    benign: true

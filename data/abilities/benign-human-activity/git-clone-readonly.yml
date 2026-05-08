@@ -1,0 +1,55 @@
+---
+
+- id: a2e0dcf7-0234-413e-9b89-9c769e8c2099
+  name: Git Clone (Read-Only)
+  description: Simulates a developer cloning a small public repo to look at
+    something, then deleting the working copy. Generates plausible
+    git-over-https traffic. Cleans up the clone afterward so we don't litter
+    the host. Skips silently if git is not installed.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_gitclone
+    name: Benign User Activity - Git Clone
+  platforms:
+    windows:
+      psh:
+        command: |
+          $git = Get-Command git.exe -ErrorAction SilentlyContinue
+          if (-not $git) {
+            Write-Output "git not installed; skipping"
+            exit 0
+          }
+          $dst = Join-Path $env:TEMP ("clone-" + (Get-Date -Format "yyyyMMddHHmmss"))
+          try {
+            git clone --depth 1 https://github.com/octocat/Hello-World.git $dst 2>&1 | Out-Null
+            Start-Sleep -Seconds 3
+          } finally {
+            if (Test-Path $dst) {
+              Remove-Item -Recurse -Force $dst -ErrorAction SilentlyContinue
+            }
+          }
+    linux:
+      sh:
+        command: |
+          if ! command -v git >/dev/null 2>&1; then
+            echo "git not installed; skipping"
+            exit 0
+          fi
+          DST="/tmp/clone-$(date +%Y%m%d%H%M%S)"
+          git clone --depth 1 https://github.com/octocat/Hello-World.git "$DST" >/dev/null 2>&1 || true
+          sleep 3
+          rm -rf "$DST"
+    darwin:
+      sh:
+        command: |
+          if ! command -v git >/dev/null 2>&1; then
+            echo "git not installed; skipping"
+            exit 0
+          fi
+          DST="/tmp/clone-$(date +%Y%m%d%H%M%S)"
+          git clone --depth 1 https://github.com/octocat/Hello-World.git "$DST" >/dev/null 2>&1 || true
+          sleep 3
+          rm -rf "$DST"
+  additional_info:
+    human: true
+    benign: true
