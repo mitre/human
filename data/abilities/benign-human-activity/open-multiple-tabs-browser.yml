@@ -1,0 +1,43 @@
+---
+
+- id: 2158377d-b363-4f63-8a09-129c55521138
+  name: Open Multiple Tabs (Browser)
+  description: Simulates a user opening 3-4 tabs in their default browser - the
+    way someone catches up on news, reference, and a search-engine landing page
+    in the morning. Short pause between each Start-Process so the browser doesn't
+    drop the URLs.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_multitab
+    name: Benign User Activity - Multiple Browser Tabs
+  platforms:
+    windows:
+      psh:
+        command: |
+          $tabs = @("https://news.ycombinator.com","https://www.wikipedia.org","https://www.reuters.com","https://www.bbc.com")
+          foreach ($t in $tabs) {
+            Start-Process $t
+            Start-Sleep -Seconds 3
+          }
+    linux:
+      sh:
+        command: |
+          TABS="https://news.ycombinator.com https://www.wikipedia.org https://www.reuters.com https://www.bbc.com"
+          if command -v xdg-open >/dev/null 2>&1; then
+            for T in $TABS; do
+              xdg-open "$T" >/dev/null 2>&1 &
+              sleep 3
+            done
+          else
+            echo "no browser launcher available; skipping"
+          fi
+    darwin:
+      sh:
+        command: |
+          for T in https://news.ycombinator.com https://www.wikipedia.org https://www.reuters.com; do
+            open "$T"
+            sleep 3
+          done
+  additional_info:
+    human: true
+    benign: true

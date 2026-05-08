@@ -1,0 +1,40 @@
+---
+
+- id: 372c1baf-8c58-46e8-aa24-f384ab8a278e
+  name: Search Files (Explorer)
+  description: Simulates a user searching for files. On Windows enumerates the
+    user's profile for a common pattern (*.docx / *.txt) using Get-ChildItem -
+    matches the I/O fingerprint of an Explorer search. On Linux runs a shallow
+    find under $HOME and opens the first match (read-only).
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_searchfiles
+    name: Benign User Activity - File Search
+  platforms:
+    windows:
+      psh:
+        command: |
+          $hits = Get-ChildItem -Path $env:USERPROFILE -Recurse -Include *.txt,*.docx -ErrorAction SilentlyContinue -Force | Select-Object -First 20
+          $hits | ForEach-Object { Write-Output $_.FullName }
+          Start-Sleep -Seconds 2
+    linux:
+      sh:
+        command: |
+          HITS=$(find "$HOME" -maxdepth 4 \( -name "*.txt" -o -name "*.md" \) 2>/dev/null | head -n 20)
+          echo "$HITS"
+          FIRST=$(echo "$HITS" | head -n 1)
+          if [ -n "$FIRST" ] && command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "$FIRST" >/dev/null 2>&1 &
+          fi
+          sleep 2
+    darwin:
+      sh:
+        command: |
+          HITS=$(find "$HOME" -maxdepth 4 -name "*.txt" 2>/dev/null | head -n 20)
+          echo "$HITS"
+          FIRST=$(echo "$HITS" | head -n 1)
+          if [ -n "$FIRST" ]; then open "$FIRST"; fi
+          sleep 2
+  additional_info:
+    human: true
+    benign: true

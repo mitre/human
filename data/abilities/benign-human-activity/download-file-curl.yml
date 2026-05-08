@@ -1,0 +1,42 @@
+---
+
+- id: 7bfe77e7-f6e8-420f-9f4f-9b2ac9d6e7f8
+  name: Download File (HTTP)
+  description: Simulates a user downloading a small benign file from the web.
+    On Windows uses Invoke-WebRequest to fetch example.com to %TEMP%. On Linux
+    uses curl to /tmp. Generates the kind of HTTP/DNS pattern AE infrastructure
+    expects to see during normal work.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_download
+    name: Benign User Activity - HTTP Download
+  platforms:
+    windows:
+      psh:
+        command: |
+          $out = Join-Path $env:TEMP ("dl-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".html")
+          try {
+            Invoke-WebRequest -Uri "https://example.com" -OutFile $out -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+            Write-Output "downloaded to $out"
+          } catch {
+            Write-Output "download failed: $_"
+          }
+    linux:
+      sh:
+        command: |
+          OUT="/tmp/dl-$(date +%Y%m%d-%H%M%S).html"
+          if command -v curl >/dev/null 2>&1; then
+            curl -sk --max-time 10 https://example.com -o "$OUT" && echo "downloaded to $OUT" || echo "download failed"
+          elif command -v wget >/dev/null 2>&1; then
+            wget -q --timeout=10 -O "$OUT" https://example.com && echo "downloaded to $OUT" || echo "download failed"
+          else
+            echo "no http client available; skipping"
+          fi
+    darwin:
+      sh:
+        command: |
+          OUT="/tmp/dl-$(date +%Y%m%d-%H%M%S).html"
+          curl -sk --max-time 10 https://example.com -o "$OUT" && echo "downloaded to $OUT" || echo "download failed"
+  additional_info:
+    human: true
+    benign: true

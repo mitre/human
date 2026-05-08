@@ -1,0 +1,46 @@
+---
+
+- id: 7fd806e3-e9d4-4437-be40-d0899d811c80
+  name: Copy File (Documents)
+  description: Simulates a user copying a file inside their Documents folder, as
+    if reorganizing or backing up. Creates a small source file, sleeps a few
+    seconds, then copies it to a sibling location. Pure shell, no GUI - shows up
+    in file-system telemetry.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_copyfile
+    name: Benign User Activity - File Copy
+  platforms:
+    windows:
+      psh:
+        command: |
+          $doc = [Environment]::GetFolderPath('MyDocuments')
+          if (-not (Test-Path $doc)) { New-Item -ItemType Directory -Path $doc | Out-Null }
+          $src = Join-Path $doc ("src-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".txt")
+          $dst = Join-Path $doc ("backup-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".txt")
+          Set-Content -Path $src -Value "Working copy. Will move into backup."
+          Start-Sleep -Seconds 4
+          Copy-Item -Path $src -Destination $dst -Force
+          Start-Sleep -Seconds 2
+    linux:
+      sh:
+        command: |
+          mkdir -p "$HOME/Documents"
+          SRC="$HOME/Documents/src-$(date +%Y%m%d-%H%M%S).txt"
+          DST="$HOME/Documents/backup-$(date +%Y%m%d-%H%M%S).txt"
+          echo "Working copy. Will move into backup." > "$SRC"
+          sleep 4
+          cp "$SRC" "$DST"
+          sleep 2
+    darwin:
+      sh:
+        command: |
+          mkdir -p "$HOME/Documents"
+          SRC="$HOME/Documents/src-$(date +%Y%m%d-%H%M%S).txt"
+          DST="$HOME/Documents/backup-$(date +%Y%m%d-%H%M%S).txt"
+          echo "Working copy." > "$SRC"
+          sleep 4
+          cp "$SRC" "$DST"
+  additional_info:
+    human: true
+    benign: true

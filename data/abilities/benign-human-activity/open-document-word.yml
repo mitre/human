@@ -1,0 +1,59 @@
+---
+
+- id: 3923e812-39da-46fb-8213-c2b11a9921e8
+  name: Open Document (Word)
+  description: Simulates a user opening a Word document. On Windows tries Word
+    via Start-Process winword.exe; if Word is missing, falls back to Notepad on
+    a generated .txt note. On Linux opens libreoffice --writer if available, else
+    an editor via xdg-open. Stays active ~20 seconds before closing to mimic a
+    quick read-and-close.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_word
+    name: Benign User Activity - Word Document
+  platforms:
+    windows:
+      psh:
+        command: |
+          $doc = [Environment]::GetFolderPath('MyDocuments')
+          if (-not (Test-Path $doc)) { New-Item -ItemType Directory -Path $doc | Out-Null }
+          $path = Join-Path $doc ("doc-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".txt")
+          Set-Content -Path $path -Value "Quarterly status notes. Lorem ipsum dolor sit amet."
+          $winword = Get-Command winword.exe -ErrorAction SilentlyContinue
+          if ($winword) {
+            $proc = Start-Process winword.exe -ArgumentList "`"$path`"" -PassThru
+            Start-Sleep -Seconds 20
+            try { $proc | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+          } else {
+            $proc = Start-Process notepad.exe -ArgumentList "`"$path`"" -PassThru
+            Start-Sleep -Seconds 20
+            try { $proc | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+          }
+    linux:
+      sh:
+        command: |
+          mkdir -p "$HOME/Documents"
+          DOC="$HOME/Documents/doc-$(date +%Y%m%d-%H%M%S).txt"
+          echo "Quarterly status notes. Lorem ipsum dolor sit amet." > "$DOC"
+          if command -v libreoffice >/dev/null 2>&1; then
+            libreoffice --writer "$DOC" >/dev/null 2>&1 &
+            PID=$!
+            sleep 20
+            kill "$PID" >/dev/null 2>&1 || true
+          elif command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "$DOC" >/dev/null 2>&1 &
+            sleep 20
+          else
+            echo "no editor available; skipping"
+          fi
+    darwin:
+      sh:
+        command: |
+          mkdir -p "$HOME/Documents"
+          DOC="$HOME/Documents/doc-$(date +%Y%m%d-%H%M%S).txt"
+          echo "Quarterly status notes." > "$DOC"
+          open -a TextEdit "$DOC"
+          sleep 20
+  additional_info:
+    human: true
+    benign: true

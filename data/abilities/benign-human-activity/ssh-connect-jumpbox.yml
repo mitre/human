@@ -1,0 +1,45 @@
+---
+
+- id: 8d3a096b-2536-432a-b37a-6367dfd87517
+  name: SSH Connect (Jumpbox Attempt)
+  description: Simulates a user attempting an SSH connection to an internal
+    jumpbox. Uses BatchMode + a short ConnectTimeout so the attempt fails fast
+    (without password prompt) and the failure does not break the plan. The point
+    is the connection-attempt event in PCAPs / SSH logs - not a successful
+    session. Pure ssh client; assumed available on Windows 10+ and most Linux
+    distros.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_sshattempt
+    name: Benign User Activity - SSH Connect Attempt
+  platforms:
+    windows:
+      psh:
+        command: |
+          $ssh = Get-Command ssh.exe -ErrorAction SilentlyContinue
+          if ($ssh) {
+            try {
+              $null = & ssh.exe -o ConnectTimeout=3 -o BatchMode=yes -o StrictHostKeyChecking=no nobody@127.0.0.1 -p 2222 "exit" 2>&1
+            } catch {}
+            Write-Output "ssh attempt complete"
+          } else {
+            Write-Output "ssh client not available; skipping"
+          }
+    linux:
+      sh:
+        command: |
+          if command -v ssh >/dev/null 2>&1; then
+            ssh -o ConnectTimeout=3 -o BatchMode=yes -o StrictHostKeyChecking=no nobody@127.0.0.1 -p 2222 exit >/dev/null 2>&1 || true
+            echo "ssh attempt complete"
+          else
+            echo "ssh client not available; skipping"
+          fi
+    darwin:
+      sh:
+        command: |
+          if command -v ssh >/dev/null 2>&1; then
+            ssh -o ConnectTimeout=3 -o BatchMode=yes -o StrictHostKeyChecking=no nobody@127.0.0.1 -p 2222 exit >/dev/null 2>&1 || true
+          fi
+  additional_info:
+    human: true
+    benign: true

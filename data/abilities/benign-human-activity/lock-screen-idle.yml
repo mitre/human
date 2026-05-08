@@ -1,0 +1,44 @@
+---
+
+- id: 2e687463-ba6f-4cee-a7fa-1e782a07225b
+  name: Lock Screen (Idle Step-Away)
+  description: Simulates a user stepping away from their desk - locks the
+    workstation briefly to mimic a coffee/lunch break, then resumes. On Windows
+    invokes user32.dll!LockWorkStation via rundll32. On Linux uses
+    xdg-screensaver lock or loginctl lock-session if available. Fails silently
+    if no locker is present (benign abilities should not crash plans).
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_lockscreen
+    name: Benign User Activity - Lock Screen
+  platforms:
+    windows:
+      psh:
+        command: |
+          try {
+            rundll32.exe user32.dll,LockWorkStation
+            Start-Sleep -Seconds 5
+          } catch {
+            Write-Output "lock-screen unavailable: $_"
+          }
+    linux:
+      sh:
+        command: |
+          if command -v xdg-screensaver >/dev/null 2>&1; then
+            xdg-screensaver lock >/dev/null 2>&1 || true
+          elif command -v loginctl >/dev/null 2>&1; then
+            loginctl lock-session >/dev/null 2>&1 || true
+          else
+            echo "no screen locker available; skipping"
+          fi
+          sleep 5
+    darwin:
+      sh:
+        command: |
+          if command -v pmset >/dev/null 2>&1; then
+            pmset displaysleepnow >/dev/null 2>&1 || true
+          fi
+          sleep 5
+  additional_info:
+    human: true
+    benign: true

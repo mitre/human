@@ -1,0 +1,58 @@
+---
+
+- id: c55bf3d7-2282-4517-aa20-db82ca24b12f
+  name: Open Spreadsheet (Excel)
+  description: Simulates a user opening a spreadsheet. On Windows generates a
+    small CSV in Documents and opens it with Excel if available, else with the
+    default CSV handler. On Linux uses libreoffice --calc when present, else
+    xdg-open on the CSV. Stays open ~20s then closes.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_excel
+    name: Benign User Activity - Spreadsheet
+  platforms:
+    windows:
+      psh:
+        command: |
+          $doc = [Environment]::GetFolderPath('MyDocuments')
+          if (-not (Test-Path $doc)) { New-Item -ItemType Directory -Path $doc | Out-Null }
+          $csv = Join-Path $doc ("sheet-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".csv")
+          @("Region,Q1,Q2,Q3,Q4","North,120,140,160,180","South,90,95,110,130","East,150,170,165,200","West,80,100,120,140") | Set-Content -Path $csv
+          $excel = Get-Command excel.exe -ErrorAction SilentlyContinue
+          if ($excel) {
+            $proc = Start-Process excel.exe -ArgumentList "`"$csv`"" -PassThru
+            Start-Sleep -Seconds 20
+            try { $proc | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+          } else {
+            $proc = Start-Process notepad.exe -ArgumentList "`"$csv`"" -PassThru
+            Start-Sleep -Seconds 20
+            try { $proc | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+          }
+    linux:
+      sh:
+        command: |
+          mkdir -p "$HOME/Documents"
+          CSV="$HOME/Documents/sheet-$(date +%Y%m%d-%H%M%S).csv"
+          printf "Region,Q1,Q2,Q3,Q4\nNorth,120,140,160,180\nSouth,90,95,110,130\nEast,150,170,165,200\nWest,80,100,120,140\n" > "$CSV"
+          if command -v libreoffice >/dev/null 2>&1; then
+            libreoffice --calc "$CSV" >/dev/null 2>&1 &
+            PID=$!
+            sleep 20
+            kill "$PID" >/dev/null 2>&1 || true
+          elif command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "$CSV" >/dev/null 2>&1 &
+            sleep 20
+          else
+            echo "no spreadsheet handler available; skipping"
+          fi
+    darwin:
+      sh:
+        command: |
+          mkdir -p "$HOME/Documents"
+          CSV="$HOME/Documents/sheet-$(date +%Y%m%d-%H%M%S).csv"
+          printf "Region,Q1,Q2\nNorth,1,2\nSouth,3,4\n" > "$CSV"
+          open "$CSV"
+          sleep 20
+  additional_info:
+    human: true
+    benign: true

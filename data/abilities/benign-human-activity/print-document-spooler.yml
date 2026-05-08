@@ -1,0 +1,55 @@
+---
+
+- id: 1236bedc-732c-440a-b869-e6e524ac2274
+  name: Print Document (Spooler)
+  description: Simulates a user printing a document. On Windows enumerates
+    printers via Get-Printer and pipes a temp file to the default printer with
+    Out-Printer if any printer is registered. On Linux uses lp/lpr to the
+    default queue. If no printer is configured, the ability logs and exits 0
+    cleanly (benign-by-default).
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_print
+    name: Benign User Activity - Print
+  platforms:
+    windows:
+      psh:
+        command: |
+          $tmp = Join-Path $env:TEMP ("print-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".txt")
+          Set-Content -Path $tmp -Value "Status report draft. Printing for review."
+          $printers = @()
+          try { $printers = Get-Printer -ErrorAction SilentlyContinue } catch {}
+          if ($printers.Count -gt 0) {
+            try {
+              Get-Content $tmp | Out-Printer -ErrorAction Stop
+              Write-Output "sent to default printer"
+            } catch {
+              Write-Output "print failed: $_"
+            }
+          } else {
+            Write-Output "no printers registered; skipping"
+          }
+    linux:
+      sh:
+        command: |
+          TMP="/tmp/print-$(date +%Y%m%d-%H%M%S).txt"
+          echo "Status report draft. Printing for review." > "$TMP"
+          if command -v lp >/dev/null 2>&1; then
+            lp "$TMP" >/dev/null 2>&1 && echo "sent to default queue (lp)" || echo "no default printer configured"
+          elif command -v lpr >/dev/null 2>&1; then
+            lpr "$TMP" >/dev/null 2>&1 && echo "sent to default queue (lpr)" || echo "no default printer configured"
+          else
+            cat "$TMP" > /dev/null
+            echo "no printing client; skipping"
+          fi
+    darwin:
+      sh:
+        command: |
+          TMP="/tmp/print-$(date +%Y%m%d-%H%M%S).txt"
+          echo "Status report draft." > "$TMP"
+          if command -v lp >/dev/null 2>&1; then
+            lp "$TMP" >/dev/null 2>&1 || echo "no default printer configured"
+          fi
+  additional_info:
+    human: true
+    benign: true
