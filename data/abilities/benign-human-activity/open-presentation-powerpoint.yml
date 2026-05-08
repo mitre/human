@@ -1,0 +1,62 @@
+---
+
+- id: 9e554734-11ba-4250-b6f8-a7e627e286e8
+  name: Open Presentation (PowerPoint)
+  description: Simulates a user opening a slide deck. On Windows tries
+    powerpnt.exe, falls back to creating a tiny .pptx via the Office COM
+    automation surface and closing. On Linux uses libreoffice --impress if
+    installed. Stays open ~20 seconds. Defensive - skips with debug if no
+    presentation tool is available.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_powerpoint
+    name: Benign User Activity - Presentation
+  platforms:
+    windows:
+      psh:
+        command: |
+          $doc = [Environment]::GetFolderPath('MyDocuments')
+          if (-not (Test-Path $doc)) { New-Item -ItemType Directory -Path $doc | Out-Null }
+          $path = Join-Path $doc ("deck-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".pptx")
+          $pp = Get-Command powerpnt.exe -ErrorAction SilentlyContinue
+          if ($pp) {
+            $proc = Start-Process powerpnt.exe -PassThru
+            Start-Sleep -Seconds 20
+            try { $proc | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+          } else {
+            try {
+              $app = New-Object -ComObject PowerPoint.Application
+              $pres = $app.Presentations.Add($true)
+              Start-Sleep -Seconds 5
+              $pres.SaveAs($path)
+              $pres.Close()
+              $app.Quit()
+              [System.Runtime.InteropServices.Marshal]::ReleaseComObject($app) | Out-Null
+            } catch {
+              Write-Host "DEBUG: PowerPoint COM unavailable; skipping"
+            }
+          }
+    linux:
+      sh:
+        command: |
+          if command -v libreoffice >/dev/null 2>&1; then
+            libreoffice --impress >/dev/null 2>&1 &
+            PID=$!
+            sleep 20
+            kill "$PID" >/dev/null 2>&1 || true
+          else
+            echo "DEBUG: libreoffice not present; skipping"
+          fi
+    darwin:
+      sh:
+        command: |
+          if [ -d "/Applications/Microsoft PowerPoint.app" ]; then
+            open -a "Microsoft PowerPoint"
+            sleep 20
+            osascript -e 'quit app "Microsoft PowerPoint"' >/dev/null 2>&1 || true
+          else
+            echo "DEBUG: PowerPoint not installed; skipping"
+          fi
+  additional_info:
+    human: true
+    benign: true

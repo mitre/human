@@ -1,0 +1,47 @@
+---
+
+- id: 5252d42a-8b56-4c50-b15d-1c9cedd66ddd
+  name: FTP Download (Anonymous)
+  description: Simulates a user pulling a file from a public anonymous FTP server
+    using curl. Produces an FTP request signature in PCAP regardless of whether
+    the remote serves a file. Defensive - if curl is missing, emits a debug
+    message and exits cleanly.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_ftp_download
+    name: Benign User Activity - FTP Download
+  platforms:
+    windows:
+      psh:
+        command: |
+          $out = Join-Path $env:TEMP ("ftp-dl-" + (Get-Date -Format "yyyyMMddHHmmss") + ".bin")
+          $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+          if ($curl) {
+            try {
+              & curl.exe --connect-timeout 5 --max-time 15 -o $out ftp://ftp.gnu.org/README --user "anonymous:user@example.com" 2>&1 | Out-Null
+            } catch {}
+          } else {
+            Write-Host "DEBUG: curl.exe not present; skipping FTP download"
+          }
+          Remove-Item $out -ErrorAction SilentlyContinue
+    linux:
+      sh:
+        command: |
+          OUT="/tmp/ftp-dl-$(date +%Y%m%d%H%M%S).bin"
+          if command -v curl >/dev/null 2>&1; then
+            curl --connect-timeout 5 --max-time 15 -o "$OUT" ftp://ftp.gnu.org/README --user "anonymous:user@example.com" >/dev/null 2>&1 || true
+          else
+            echo "DEBUG: curl not present; skipping FTP download"
+          fi
+          rm -f "$OUT"
+    darwin:
+      sh:
+        command: |
+          OUT="/tmp/ftp-dl-$(date +%Y%m%d%H%M%S).bin"
+          if command -v curl >/dev/null 2>&1; then
+            curl --connect-timeout 5 --max-time 15 -o "$OUT" ftp://ftp.gnu.org/README --user "anonymous:user@example.com" >/dev/null 2>&1 || true
+          fi
+          rm -f "$OUT"
+  additional_info:
+    human: true
+    benign: true

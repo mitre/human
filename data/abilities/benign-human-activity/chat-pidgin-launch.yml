@@ -1,0 +1,66 @@
+---
+
+- id: bf593667-9b3c-4c07-92a3-d0c56c723731
+  name: Chat Client (Pidgin) Launch
+  description: Simulates a user opening their IM client. On Linux launches
+    Pidgin in the background for ~5 seconds then kills it. On Windows checks
+    Get-StartApps for an installed IM tool (Pidgin, Slack, Skype) and launches
+    the first match. Defensive - Pidgin is rarely installed; emits a debug
+    message and skips when absent.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_chat_pidgin
+    name: Benign User Activity - IM Client
+  platforms:
+    windows:
+      psh:
+        command: |
+          $candidates = @("Pidgin","Slack","Skype","Microsoft Teams")
+          $hit = $null
+          try {
+            $apps = Get-StartApps -ErrorAction SilentlyContinue
+            foreach ($c in $candidates) {
+              $hit = $apps | Where-Object { $_.Name -like "*$c*" } | Select-Object -First 1
+              if ($hit) { break }
+            }
+          } catch {}
+          if ($hit) {
+            try {
+              Start-Process "shell:AppsFolder\$($hit.AppID)"
+              Start-Sleep -Seconds 5
+            } catch {
+              Write-Host "DEBUG: failed to launch $($hit.Name)"
+            }
+          } else {
+            Write-Host "DEBUG: no IM client found in Start Apps; skipping"
+          }
+    linux:
+      sh:
+        command: |
+          if command -v pidgin >/dev/null 2>&1; then
+            DISPLAY="${DISPLAY:-:0}" pidgin >/dev/null 2>&1 &
+            PID=$!
+            sleep 5
+            kill "$PID" >/dev/null 2>&1 || true
+          elif command -v hexchat >/dev/null 2>&1; then
+            DISPLAY="${DISPLAY:-:0}" hexchat >/dev/null 2>&1 &
+            PID=$!
+            sleep 5
+            kill "$PID" >/dev/null 2>&1 || true
+          else
+            echo "DEBUG: pidgin/hexchat not installed; skipping"
+          fi
+          exit 0
+    darwin:
+      sh:
+        command: |
+          if [ -d "/Applications/Adium.app" ]; then
+            open -a Adium
+            sleep 5
+            osascript -e 'quit app "Adium"' >/dev/null 2>&1 || true
+          else
+            echo "DEBUG: no IM client installed; skipping"
+          fi
+  additional_info:
+    human: true
+    benign: true

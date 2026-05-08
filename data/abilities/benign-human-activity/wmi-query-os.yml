@@ -1,0 +1,36 @@
+---
+
+- id: 046387fc-ef7c-41e9-8643-23f812aefcd2
+  name: WMI / OS Introspection Query
+  description: Simulates a help-desk style system-introspection query. On
+    Windows runs Get-CimInstance Win32_OperatingSystem and emits JSON - a
+    real WMI provider call that surfaces in WMI-Activity / Sysmon event logs.
+    On Linux dumps /etc/os-release and uname info as the analog.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_wmi_os
+    name: Benign User Activity - System Introspection
+  platforms:
+    windows:
+      psh:
+        command: |
+          try {
+            Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,OSArchitecture,LastBootUpTime | ConvertTo-Json
+          } catch {
+            Get-WmiObject Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,OSArchitecture,LastBootUpTime | ConvertTo-Json
+          }
+    linux:
+      sh:
+        command: |
+          if [ -f /etc/os-release ]; then
+            cat /etc/os-release
+          fi
+          uname -a
+    darwin:
+      sh:
+        command: |
+          sw_vers
+          uname -a
+  additional_info:
+    human: true
+    benign: true

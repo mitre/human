@@ -1,0 +1,49 @@
+---
+
+- id: de7d746b-55be-4341-b6db-3082469b8cc1
+  name: RDP Connect Attempt
+  description: Launches the RDP client briefly against 127.0.0.1 to generate a
+    Remote Desktop client process / network signature, then closes. On Windows
+    uses mstsc.exe; on Linux tries xfreerdp if installed. Defensive - skips
+    cleanly if no RDP client is available.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_rdp_connect
+    name: Benign User Activity - RDP Client Launch
+  platforms:
+    windows:
+      psh:
+        command: |
+          $mstsc = Get-Command mstsc.exe -ErrorAction SilentlyContinue
+          if ($mstsc) {
+            $proc = Start-Process mstsc.exe -ArgumentList "/v:127.0.0.1" -PassThru
+            Start-Sleep -Seconds 5
+            try { $proc | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+          } else {
+            Write-Host "DEBUG: mstsc.exe not present; skipping RDP connect"
+          }
+    linux:
+      sh:
+        command: |
+          if command -v xfreerdp >/dev/null 2>&1; then
+            xfreerdp /v:127.0.0.1 /timeout:3000 /cert:ignore +auth-only >/dev/null 2>&1 &
+            PID=$!
+            sleep 5
+            kill "$PID" >/dev/null 2>&1 || true
+          elif command -v rdesktop >/dev/null 2>&1; then
+            rdesktop 127.0.0.1 >/dev/null 2>&1 &
+            PID=$!
+            sleep 5
+            kill "$PID" >/dev/null 2>&1 || true
+          else
+            echo "DEBUG: no RDP client installed; skipping"
+          fi
+          exit 0
+    darwin:
+      sh:
+        command: |
+          echo "DEBUG: macOS RDP client not auto-launched; skipping"
+          exit 0
+  additional_info:
+    human: true
+    benign: true

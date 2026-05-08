@@ -1,0 +1,44 @@
+---
+
+- id: 2b8f5dec-41fa-4c9a-ab12-2756daeffd89
+  name: SFTP Connect Attempt
+  description: Real SFTP/SSH handshake against a host with BatchMode=yes and a
+    short timeout - just enough to surface in PCAP/SSH audit logs. Always exits
+    0 even if the connect fails (which is expected against 127.0.0.1 without a
+    listener). Defensive - skips with debug if sftp is not installed.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_sftp_connect
+    name: Benign User Activity - SFTP Connection
+  platforms:
+    windows:
+      psh:
+        command: |
+          $sftp = Get-Command sftp.exe -ErrorAction SilentlyContinue
+          if ($sftp) {
+            try {
+              & sftp.exe -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=3 nobody@127.0.0.1 2>&1 | Out-Null
+            } catch {}
+          } else {
+            Write-Host "DEBUG: sftp.exe not present; skipping SFTP connect"
+          }
+          exit 0
+    linux:
+      sh:
+        command: |
+          if command -v sftp >/dev/null 2>&1; then
+            sftp -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=3 nobody@127.0.0.1 </dev/null >/dev/null 2>&1 || true
+          else
+            echo "DEBUG: sftp not present; skipping SFTP connect"
+          fi
+          exit 0
+    darwin:
+      sh:
+        command: |
+          if command -v sftp >/dev/null 2>&1; then
+            sftp -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=3 nobody@127.0.0.1 </dev/null >/dev/null 2>&1 || true
+          fi
+          exit 0
+  additional_info:
+    human: true
+    benign: true

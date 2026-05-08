@@ -1,0 +1,41 @@
+---
+
+- id: 2eec2866-d81f-4ec7-874d-91571755511f
+  name: Open Twitter / X Tab
+  description: Simulates a user opening a social media tab in their default
+    browser - GHOSTS' SocialHelper analog. Pure URL launch; the focus is the
+    DNS / TLS-SNI signature for twitter.com or x.com appearing in network
+    telemetry alongside other benign browsing.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_twitter
+    name: Benign User Activity - Social Media
+  platforms:
+    windows:
+      psh:
+        command: |
+          $sites = @("https://twitter.com","https://x.com")
+          $pick = Get-Random -InputObject $sites
+          $edge = Get-Command msedge.exe -ErrorAction SilentlyContinue
+          if ($edge) {
+            Start-Process msedge.exe $pick
+          } else {
+            Start-Process $pick
+          }
+    linux:
+      sh:
+        command: |
+          SITES="https://twitter.com https://x.com"
+          PICK=$(echo $SITES | tr ' ' '\n' | shuf -n 1)
+          if command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "$PICK" >/dev/null 2>&1 &
+          else
+            echo "DEBUG: xdg-open not present; skipping"
+          fi
+    darwin:
+      sh:
+        command: |
+          open "https://twitter.com"
+  additional_info:
+    human: true
+    benign: true

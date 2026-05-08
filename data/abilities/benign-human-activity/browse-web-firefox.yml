@@ -1,0 +1,58 @@
+---
+
+- id: 0df36b6c-611b-4ca8-8bfb-6a2deb198d38
+  name: Browse Web (Firefox)
+  description: Specifically launches Firefox against a benign URL so process
+    telemetry shows firefox.exe / firefox in the tree - distinct from the
+    default-browser news ability. Defensive fallback to xdg-open / Edge on
+    Windows when Firefox is absent.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_firefox
+    name: Benign User Activity - Firefox Browsing
+  platforms:
+    windows:
+      psh:
+        command: |
+          $url = "https://www.wikipedia.org"
+          $candidates = @(
+            "$env:ProgramFiles\Mozilla Firefox\firefox.exe",
+            "${env:ProgramFiles(x86)}\Mozilla Firefox\firefox.exe",
+            "$env:LOCALAPPDATA\Mozilla Firefox\firefox.exe"
+          )
+          $ff = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $ff) { $ff = (Get-Command firefox.exe -ErrorAction SilentlyContinue).Source }
+          if ($ff) {
+            Start-Process $ff $url
+          } else {
+            $edge = Get-Command msedge.exe -ErrorAction SilentlyContinue
+            if ($edge) {
+              Start-Process msedge.exe $url
+            } else {
+              Write-Host "DEBUG: Firefox not installed and no Edge fallback; skipping"
+            }
+          }
+    linux:
+      sh:
+        command: |
+          URL="https://www.wikipedia.org"
+          if command -v firefox >/dev/null 2>&1; then
+            firefox "$URL" >/dev/null 2>&1 &
+          elif command -v firefox-esr >/dev/null 2>&1; then
+            firefox-esr "$URL" >/dev/null 2>&1 &
+          elif command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "$URL" >/dev/null 2>&1 &
+          else
+            echo "DEBUG: no Firefox/xdg-open available; skipping"
+          fi
+    darwin:
+      sh:
+        command: |
+          if [ -d "/Applications/Firefox.app" ]; then
+            open -a "Firefox" "https://www.wikipedia.org"
+          else
+            open "https://www.wikipedia.org"
+          fi
+  additional_info:
+    human: true
+    benign: true

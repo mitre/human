@@ -1,0 +1,50 @@
+---
+
+- id: 11db275a-3461-434b-92d3-e9ea485b1fc4
+  name: FTP Upload (Anonymous)
+  description: Simulates a user uploading a small text file to a public anonymous
+    FTP server using curl. Generates an FTP control-channel signature in PCAP
+    even if the destination refuses or rate-limits. Defensive - if curl is not
+    installed, emits a debug message and exits cleanly.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_ftp_upload
+    name: Benign User Activity - FTP Upload
+  platforms:
+    windows:
+      psh:
+        command: |
+          $tmp = Join-Path $env:TEMP ("ftp-upload-" + (Get-Date -Format "yyyyMMddHHmmss") + ".txt")
+          Set-Content -Path $tmp -Value "benign upload payload from human plugin"
+          $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+          if ($curl) {
+            try {
+              & curl.exe --connect-timeout 5 --max-time 15 -T $tmp ftp://ftp.example.com/ --user "anonymous:user@example.com" 2>&1 | Out-Null
+            } catch {}
+          } else {
+            Write-Host "DEBUG: curl.exe not present; skipping FTP upload"
+          }
+          Remove-Item $tmp -ErrorAction SilentlyContinue
+    linux:
+      sh:
+        command: |
+          TMP="/tmp/ftp-upload-$(date +%Y%m%d%H%M%S).txt"
+          echo "benign upload payload from human plugin" > "$TMP"
+          if command -v curl >/dev/null 2>&1; then
+            curl --connect-timeout 5 --max-time 15 -T "$TMP" ftp://ftp.example.com/ --user "anonymous:user@example.com" >/dev/null 2>&1 || true
+          else
+            echo "DEBUG: curl not present; skipping FTP upload"
+          fi
+          rm -f "$TMP"
+    darwin:
+      sh:
+        command: |
+          TMP="/tmp/ftp-upload-$(date +%Y%m%d%H%M%S).txt"
+          echo "benign upload payload from human plugin" > "$TMP"
+          if command -v curl >/dev/null 2>&1; then
+            curl --connect-timeout 5 --max-time 15 -T "$TMP" ftp://ftp.example.com/ --user "anonymous:user@example.com" >/dev/null 2>&1 || true
+          fi
+          rm -f "$TMP"
+  additional_info:
+    human: true
+    benign: true

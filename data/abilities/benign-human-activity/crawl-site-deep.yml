@@ -1,0 +1,69 @@
+---
+
+- id: b0e6d2e5-a3da-4bcf-84cb-7f7734ae37a2
+  name: Crawl Site (Deep)
+  description: Simulates research-style web crawling - recursively fetches a
+    benign site to depth 2 with wget. If wget is missing, falls back to a
+    one-level manual crawl using curl + grep to extract and re-fetch links.
+    Stays under ~25 seconds via timeouts. All output written to a temp dir
+    that is cleaned up.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_crawl_deep
+    name: Benign User Activity - Site Crawl
+  platforms:
+    windows:
+      psh:
+        command: |
+          $dst = Join-Path $env:TEMP ("crawl-" + [System.Guid]::NewGuid().ToString())
+          New-Item -ItemType Directory -Path $dst | Out-Null
+          $wget = Get-Command wget.exe -ErrorAction SilentlyContinue
+          if ($wget) {
+            try {
+              & wget.exe --timeout=5 --tries=1 -r -l 2 -np -q -P $dst https://example.com/ 2>&1 | Out-Null
+            } catch {}
+          } else {
+            $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+            if ($curl) {
+              try {
+                $idx = & curl.exe --max-time 10 -s https://example.com/
+                $links = [regex]::Matches($idx, 'href="(https?://[^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Select-Object -First 5
+                foreach ($l in $links) {
+                  & curl.exe --max-time 5 -s -o (Join-Path $dst ([System.Guid]::NewGuid().ToString())) $l 2>&1 | Out-Null
+                }
+              } catch {}
+            } else {
+              Write-Host "DEBUG: neither wget nor curl present; skipping"
+            }
+          }
+          Remove-Item -Recurse -Force $dst -ErrorAction SilentlyContinue
+    linux:
+      sh:
+        command: |
+          DST="/tmp/crawl-$$"
+          mkdir -p "$DST"
+          if command -v wget >/dev/null 2>&1; then
+            timeout 25 wget --timeout=5 --tries=1 -r -l 2 -np -q -P "$DST" https://example.com/ >/dev/null 2>&1 || true
+          elif command -v curl >/dev/null 2>&1; then
+            IDX=$(curl --max-time 10 -s https://example.com/)
+            echo "$IDX" | grep -oE 'href="https?://[^"]+"' | head -5 | sed 's/href="//;s/"$//' | while read L; do
+              curl --max-time 5 -s -o "$DST/$(echo "$L" | md5sum | cut -c1-8)" "$L" >/dev/null 2>&1 || true
+            done
+          else
+            echo "DEBUG: neither wget nor curl present; skipping"
+          fi
+          rm -rf "$DST"
+    darwin:
+      sh:
+        command: |
+          DST="/tmp/crawl-$$"
+          mkdir -p "$DST"
+          if command -v wget >/dev/null 2>&1; then
+            wget --timeout=5 --tries=1 -r -l 2 -np -q -P "$DST" https://example.com/ >/dev/null 2>&1 || true
+          elif command -v curl >/dev/null 2>&1; then
+            curl --max-time 10 -s https://example.com/ -o "$DST/index.html" >/dev/null 2>&1 || true
+          fi
+          rm -rf "$DST"
+  additional_info:
+    human: true
+    benign: true

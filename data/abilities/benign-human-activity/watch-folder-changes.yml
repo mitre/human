@@ -1,0 +1,56 @@
+---
+
+- id: f6b7130e-3ef6-4064-9462-960ac1efeec6
+  name: Watch Folder Changes
+  description: Subscribes to filesystem-change notifications on the user's
+    Downloads folder for ~25 seconds. On Windows uses
+    System.IO.FileSystemWatcher with Register-ObjectEvent; on Linux uses
+    inotifywait. Generates real OS-level filesystem-watch audit events.
+    Defensive - degrades to a sleep if the watcher tool is missing.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_watch_fs
+    name: Benign User Activity - Filesystem Watch
+  platforms:
+    windows:
+      psh:
+        command: |
+          $target = Join-Path $env:USERPROFILE "Downloads"
+          if (-not (Test-Path $target)) { $target = $env:USERPROFILE }
+          try {
+            $w = New-Object System.IO.FileSystemWatcher $target
+            $w.IncludeSubdirectories = $false
+            $w.EnableRaisingEvents = $true
+            $sub = Register-ObjectEvent -InputObject $w -EventName Created -SourceIdentifier "HumanWatch_$([Guid]::NewGuid().ToString('N'))"
+            Start-Sleep -Seconds 25
+            Unregister-Event -SourceIdentifier $sub.Name -ErrorAction SilentlyContinue
+            $w.EnableRaisingEvents = $false
+            $w.Dispose()
+          } catch {
+            Write-Host "DEBUG: filesystem watch failed: $_"
+            Start-Sleep -Seconds 5
+          }
+    linux:
+      sh:
+        command: |
+          TARGET="$HOME/Downloads"
+          [ -d "$TARGET" ] || TARGET="$HOME"
+          if command -v inotifywait >/dev/null 2>&1; then
+            inotifywait -t 25 -q "$TARGET" >/dev/null 2>&1 || true
+          else
+            echo "DEBUG: inotifywait not present; sleeping in lieu of watch"
+            sleep 5
+          fi
+    darwin:
+      sh:
+        command: |
+          TARGET="$HOME/Downloads"
+          [ -d "$TARGET" ] || TARGET="$HOME"
+          if command -v fswatch >/dev/null 2>&1; then
+            timeout 25 fswatch -1 "$TARGET" >/dev/null 2>&1 || true
+          else
+            sleep 5
+          fi
+  additional_info:
+    human: true
+    benign: true

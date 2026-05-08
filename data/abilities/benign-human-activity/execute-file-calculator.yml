@@ -1,0 +1,55 @@
+---
+
+- id: 738d1fec-cb86-4e06-b0e7-f277eeac854b
+  name: Execute Calculator
+  description: Simulates a user opening a desktop utility. On Windows launches
+    calc.exe and stops the CalculatorApp UWP process after 5 seconds. On Linux
+    launches xcalc / gnome-calculator if an X session is available. Defensive
+    - skips with a debug message if no calculator binary is found.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_calc
+    name: Benign User Activity - Desktop Utility
+  platforms:
+    windows:
+      psh:
+        command: |
+          try {
+            Start-Process calc.exe
+            Start-Sleep -Seconds 5
+            Stop-Process -Name CalculatorApp -Force -ErrorAction SilentlyContinue
+            Stop-Process -Name calc -Force -ErrorAction SilentlyContinue
+          } catch {
+            Write-Host "DEBUG: calculator launch failed: $_"
+          }
+    linux:
+      sh:
+        command: |
+          if [ -z "${DISPLAY:-}" ]; then
+            echo "DEBUG: no X DISPLAY; skipping calculator"
+            exit 0
+          fi
+          if command -v gnome-calculator >/dev/null 2>&1; then
+            gnome-calculator >/dev/null 2>&1 &
+            PID=$!
+          elif command -v xcalc >/dev/null 2>&1; then
+            xcalc >/dev/null 2>&1 &
+            PID=$!
+          elif command -v kcalc >/dev/null 2>&1; then
+            kcalc >/dev/null 2>&1 &
+            PID=$!
+          else
+            echo "DEBUG: no calculator binary present; skipping"
+            exit 0
+          fi
+          sleep 5
+          kill "$PID" >/dev/null 2>&1 || true
+    darwin:
+      sh:
+        command: |
+          open -a Calculator
+          sleep 5
+          osascript -e 'quit app "Calculator"' >/dev/null 2>&1 || true
+  additional_info:
+    human: true
+    benign: true
