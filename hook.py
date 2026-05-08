@@ -7,6 +7,16 @@ description = 'Emulate human behavior on a system'
 address = '/plugin/human/gui'
 access = BaseWorld.Access.APP
 
+# NOTE (timestone-human-rewrite): Caldera's data_svc walks each plugin's
+# `data/` directory automatically (see app/service/data_svc.py: it builds the
+# plugin list and reads `plugin.data_dir`). That means the new
+# `data/abilities/benign-human-activity/*.yml` and
+# `data/adversaries/office-worker.yml` files are discovered without any
+# explicit registration here - they show up as normal abilities / adversaries
+# in the Caldera UI and can be dropped into operations alongside red-team
+# adversary plans. The pyhuman/ python runtime is deprecated; see
+# pyhuman/DEPRECATED.md.
+
 
 async def enable(services):
     app = services.get('app_svc').application
