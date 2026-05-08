@@ -1,0 +1,17 @@
+---
+
+id: 2a89c99d-8213-4b03-807e-f5bb3baf05be
+name: Developer
+description: Benign-human persona that mimics a software developer's workday -
+  cloning a small public repo, browsing tech reference sites, opening multiple
+  tabs (Stack Overflow / GitHub flavor), eyeballing a CSV, downloading a
+  resource, and taking a think-pause. Designed to drive sandcat agents
+  alongside red-team plans so the activity timeline includes plausible dev
+  workstation noise.
+atomic_ordering:
+  - a2e0dcf7-0234-413e-9b89-9c769e8c2099  # Git Clone (Read-Only)
+  - 916031c8-5d56-489d-8c47-78432c1d2fd7  # Browse Web (News Site)
+  - 2158377d-b363-4f63-8a09-129c55521138  # Open Multiple Tabs (Browser)
+  - c55bf3d7-2282-4517-aa20-db82ca24b12f  # Open Spreadsheet (Excel)
+  - 7bfe77e7-f6e8-420f-9f4f-9b2ac9d6e7f8  # Download File (HTTP)
+  - 63becd05-401e-4dcf-80f3-9cd96a8a6830  # Idle Think Time

@@ -1,0 +1,16 @@
+---
+
+id: 920c3a5f-6c90-4512-8ff4-9761bb504728
+name: Support Agent
+description: Benign-human persona that mimics a tier-2 support engineer
+  triaging tickets - check webmail for new tickets, attempt an SSH connection
+  to a jumpbox (fast-fail), search local files for a runbook, copy a file
+  into Documents, and keep multiple knowledge-base tabs open. Drives the SSH-
+  attempt and file-search abilities that other personas don't exercise.
+atomic_ordering:
+  - 61100ded-5f39-40f3-b554-f5090e34777d  # Open Email (Webmail)
+  - 2158377d-b363-4f63-8a09-129c55521138  # Open Multiple Tabs (Browser)
+  - 8d3a096b-2536-432a-b37a-6367dfd87517  # SSH Connect (Jumpbox Attempt)
+  - 372c1baf-8c58-46e8-aa24-f384ab8a278e  # Search Files (Explorer)
+  - 7fd806e3-e9d4-4437-be40-d0899d811c80  # Copy File (Documents)
+  - 63becd05-401e-4dcf-80f3-9cd96a8a6830  # Idle Think Time

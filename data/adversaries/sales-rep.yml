@@ -1,0 +1,16 @@
+---
+
+id: bcc20377-77a7-43f6-a169-ff79016bb299
+name: Sales Rep
+description: Benign-human persona that mimics a field-sales rep working
+  pipeline - skim webmail, open the deals spreadsheet, draft a proposal in
+  Word, browse a quick news headline, keep CRM/LinkedIn tabs open, then
+  reply to a prospect. Heavy on Office documents and webmail compared to
+  the technical personas.
+atomic_ordering:
+  - 61100ded-5f39-40f3-b554-f5090e34777d  # Open Email (Webmail)
+  - c55bf3d7-2282-4517-aa20-db82ca24b12f  # Open Spreadsheet (Excel)
+  - 3923e812-39da-46fb-8213-c2b11a9921e8  # Open Document (Word)
+  - 916031c8-5d56-489d-8c47-78432c1d2fd7  # Browse Web (News Site)
+  - 2158377d-b363-4f63-8a09-129c55521138  # Open Multiple Tabs (Browser)
+  - fee7dbb5-7865-4326-a6f8-ace6c61fd9d6  # Reply Email (Outlook)

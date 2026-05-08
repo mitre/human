@@ -1,0 +1,17 @@
+---
+
+id: d5ab0441-ee49-476a-b3fa-85114c78346a
+name: Executive
+description: Benign-human persona that mimics a senior leader's morning -
+  scan webmail, check the calendar, reply to a couple of threads, skim
+  multiple news/financial tabs, review a draft document, then send something
+  to print. Generates a meeting-heavy, email-heavy fingerprint distinct from
+  the developer or support-agent personas.
+atomic_ordering:
+  - 61100ded-5f39-40f3-b554-f5090e34777d  # Open Email (Webmail)
+  - fb1b7146-d9d6-4957-9e51-b7726cd608db  # Open Calendar (App or Web)
+  - fee7dbb5-7865-4326-a6f8-ace6c61fd9d6  # Reply Email (Outlook)
+  - 2158377d-b363-4f63-8a09-129c55521138  # Open Multiple Tabs (Browser)
+  - 3923e812-39da-46fb-8213-c2b11a9921e8  # Open Document (Word)
+  - 63becd05-401e-4dcf-80f3-9cd96a8a6830  # Idle Think Time
+  - 1236bedc-732c-440a-b869-e6e524ac2274  # Print Document (Spooler)
