@@ -2,7 +2,8 @@
 
 - id: a82d9de2-75f2-4759-bfe3-0b3696c759da
   name: Open Teams (App or Web)
-  description: Simulates a user opening Microsoft Teams to check chats. On
+  description: |
+    Simulates a user opening Microsoft Teams to check chats. On
     Windows tries the msteams: URI handler first, then falls back to opening
     teams.microsoft.com in the default browser. On Linux opens the Teams web
     client via xdg-open. Pure shell, no automation interactions inside the app.

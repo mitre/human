@@ -2,7 +2,8 @@
 
 - id: fee7dbb5-7865-4326-a6f8-ace6c61fd9d6
   name: Reply Email (Outlook)
-  description: Simulates a user replying to email. On Windows, attempts to launch
+  description: |
+    Simulates a user replying to email. On Windows, attempts to launch
     Outlook via the mailto: URI scheme so the system's default mail handler
     composes a draft. If Outlook COM is available, opens a compose window
     silently. Falls back to opening webmail compose in the default browser when

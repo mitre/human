@@ -2,7 +2,8 @@
 
 - id: fb1b7146-d9d6-4957-9e51-b7726cd608db
   name: Open Calendar (App or Web)
-  description: Simulates a user checking today's meetings. On Windows tries
+  description: |
+    Simulates a user checking today's meetings. On Windows tries
     the outlookcal: URI to launch Outlook calendar, falling back to the Outlook
     Live calendar in browser. On Linux opens Google Calendar in the browser.
     Persona-realistic morning step.
