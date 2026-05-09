@@ -161,14 +161,19 @@ class HumanService(BaseService):
         # too so human.vue's step preview can render without round-tripping.
         live.extend(self._discover_profiles())
 
-        # 2) Legacy stub shell workflows.
+        # 2) Legacy stub shell workflows. is_hid is False so the
+        # frontend's "Legacy shell-cradle ability" warning shows for
+        # them — these run via /api/run as a single shell command.
         live.extend([
             {'id': 'idle_browse', 'name': 'Idle Browse',
-             'description': 'Open a few benign URLs in a real browser.'},
+             'description': 'Open a few benign URLs in a real browser.',
+             'is_hid': False},
             {'id': 'office_open', 'name': 'Office Open',
-             'description': 'Open and edit a document for N seconds.'},
+             'description': 'Open and edit a document for N seconds.',
+             'is_hid': False},
             {'id': 'shell_noop',  'name': 'Shell No-op',
-             'description': 'Run a benign shell command (echo / sleep).'},
+             'description': 'Run a benign shell command (echo / sleep).',
+             'is_hid': False},
         ])
         try:
             legacy = await self.data_svc.locate('workflows')
@@ -182,6 +187,7 @@ class HumanService(BaseService):
                     'name': name,
                     'description': disp.get('description')
                                    or getattr(w, 'description', '') or '',
+                    'is_hid': False,
                 })
         except Exception:
             pass
@@ -193,6 +199,24 @@ class HumanService(BaseService):
         The dict carries `profile_id` so the frontend knows to take the
         SSE/run-profile path; legacy entries lack that key and fall
         through to the cradle-builder run path.
+
+        We also classify each profile as HID vs legacy shell-cradle so
+        the UI can hide the "Legacy shell-cradle ability (no HID step-
+        list)" warning for profiles that ARE driven through the input
+        daemon. Detection rules (any one is sufficient):
+
+          * top-level ``steps:`` list (the "new" profile shape — what
+            data/adversaries/surf-the-web.yml uses).
+          * top-level ``platforms.<os>.steps`` (platform-aware shape).
+          * legacy ``hid.steps`` list (the very first profile shape).
+
+        Anything else is legacy ``atomic_ordering``-based (a list of
+        ability UUIDs that resolve to shell-cradle abilities) and the
+        warning correctly applies. The frontend reads ``hid.steps`` to
+        render the step-preview, so for HID profiles we surface the
+        steps under that key — even when the YAML keeps them at the
+        top level — so the existing v-if logic Just Works without
+        having to refactor the picker template.
         """
         import yaml
         out = []
@@ -216,12 +240,57 @@ class HumanService(BaseService):
                 continue
             entry = entries[0]
             pid = entry.get('id') or os.path.splitext(name)[0]
+
+            # ---- HID classification --------------------------------
+            top_steps = entry.get('steps')
+            platforms = entry.get('platforms') or {}
+            platform_steps = None
+            if isinstance(platforms, dict):
+                # Pick any platform branch with a steps list — the
+                # picker only needs ONE for the preview; the
+                # materializer picks the right one at run-time.
+                for branch in platforms.values():
+                    if isinstance(branch, dict) and isinstance(
+                            branch.get('steps'), list):
+                        platform_steps = branch['steps']
+                        break
+            hid_block = entry.get('hid') or {}
+            legacy_hid_steps = hid_block.get('steps') \
+                if isinstance(hid_block, dict) else None
+
+            if isinstance(top_steps, list):
+                resolved_steps = top_steps
+            elif isinstance(platform_steps, list):
+                resolved_steps = platform_steps
+            elif isinstance(legacy_hid_steps, list):
+                resolved_steps = legacy_hid_steps
+            else:
+                resolved_steps = None
+
+            is_hid = resolved_steps is not None
+
+            # Surface the steps under hid.steps so human.vue's existing
+            # `wf.hid.steps` lookup renders the preview for ALL HID
+            # profile shapes (top-level steps:, platforms.<os>.steps,
+            # or legacy hid.steps). Preserve any other hid keys
+            # (estimated_duration_s, args defaults, etc).
+            hid_out = dict(hid_block) if isinstance(hid_block, dict) else {}
+            if is_hid:
+                hid_out['steps'] = resolved_steps
+                # Surface duration so the "~Ns" hint in the step-preview
+                # header matches the YAML's estimate when present.
+                if 'estimated_duration_s' not in hid_out \
+                        and entry.get('duration_estimate_s') is not None:
+                    hid_out['estimated_duration_s'] = \
+                        entry.get('duration_estimate_s')
+
             out.append({
                 'id': pid,                       # used by the picker key
                 'profile_id': pid,               # marks it as run-profile path
                 'name': entry.get('name') or os.path.splitext(name)[0],
                 'description': (entry.get('description') or '').strip(),
-                'hid': entry.get('hid') or {},   # may be empty for profiles
+                'is_hid': is_hid,                # frontend gates legacy warning
+                'hid': hid_out,                  # populated for HID profiles
             })
         return out
 

@@ -262,6 +262,17 @@ defineExpose({ refresh, autoRefreshAfterRecording })
   flex: 0 0 auto;
 }
 
+/* Force chevron glyph white. Caldera's theme defines --caldera-fg as a
+   dark colour in light layouts, and global `i.fas` rules can outrank a
+   scoped inherited color, so the chevron renders the same shade as the
+   dark button background and looks blank. !important here matches the
+   pattern in LiveEndpointViewer.vue. */
+.collapse-toggle .icon,
+.collapse-toggle .icon i,
+.recordings-header .button .icon i {
+  color: #fff !important;
+}
+
 .recordings-body {
   margin-top: 0.5rem;
 }

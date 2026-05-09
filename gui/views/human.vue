@@ -223,7 +223,10 @@
 
             <div v-if="selectedAbilitySteps.length" class="step-preview">
               <div class="is-flex is-justify-content-space-between is-align-items-baseline">
-                <h4 class="title is-6 mb-1">Step preview</h4>
+                <h4 class="title is-6 mb-1">
+                  Step preview
+                  <span class="tag is-success is-small ml-2">HID</span>
+                </h4>
                 <small class="has-text-grey">
                   {{ selectedAbilitySteps.length }} steps
                   · ~{{ selectedAbilityDurationS }}s
@@ -237,7 +240,8 @@
                 </li>
               </ol>
             </div>
-            <div v-else-if="selectedWorkflowName" class="notification is-dark py-2 px-3">
+            <div v-else-if="selectedWorkflowName && selectedIsLegacy"
+                 class="notification is-dark py-2 px-3">
               <p class="is-size-7">
                 Legacy shell-cradle ability (no HID step-list). It will run as
                 a single shell command via sandcat, not through the input
@@ -440,6 +444,19 @@ const selectedAbilityDurationS = computed(() => {
   if (!a) return 0
   const wf = workflows.value.find(w => w.id === a.workflow_id)
   return (wf && wf.hid && wf.hid.estimated_duration_s) || 0
+})
+
+// True only when the picked ability is unambiguously legacy (cradle-
+// builder shell command, no step list). human_svc.py sets is_hid:false
+// on stub workflows + any data_svc legacy workflows; HID profiles set
+// is_hid:true. We default to FALSE so the warning doesn't flash for
+// abilities that arrived from older API responses without the flag —
+// the warning is only worth showing when we KNOW it's legacy.
+const selectedIsLegacy = computed(() => {
+  const a = assignments[selectedHostId.value]
+  if (!a) return false
+  const wf = workflows.value.find(w => w.id === a.workflow_id)
+  return !!wf && wf.is_hid === false
 })
 
 // `currentStepIdx` is the step the in-flight human-actor is replaying right
@@ -804,8 +821,21 @@ onMounted(async () => {
   padding: 1rem;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 60px); /* leave room for Caldera's top nav */
-  min-height: 600px;
+  /* Use min-height instead of a fixed height so the page can extend
+     when content (live viewer + 3-row grid + Recordings section) is
+     intrinsically taller than the viewport. With a fixed height, the
+     grid's `minmax(75vh, 1fr)` viewer track plus row-1 (200px) plus
+     row-3 (~280-420px) can push past the container — and the
+     RecordingsBrowser sibling (flex 0 0 auto, no overflow rules)
+     ends up painting at a y-offset that overlaps the bottom of the
+     viewer ("No recordings yet…" text appearing inside the Live
+     Endpoint frame). Switching to min-height lets the surrounding
+     page scroll naturally; nothing overlaps.
+     overflow-y: auto on .human-live (rather than the document body)
+     keeps Caldera-core's top navigation pinned in place. */
+  min-height: calc(100vh - 60px);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .human-header {

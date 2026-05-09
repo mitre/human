@@ -397,7 +397,7 @@ defineExpose({ vncWsUrl, MAX_RETRIES, RETRY_DELAY_MS })
    collapse icon). */
 .collapse-toggle .icon,
 .collapse-toggle .icon i {
-  color: var(--caldera-fg, #fff);
+  color: #fff !important;
 }
 
 /* When collapsed, drop bottom-margin from the header so the section
