@@ -627,9 +627,15 @@ onMounted(() => {
 
 .human-grid {
   display: grid;
-  grid-template-columns: 1fr 2fr 1.2fr;
+  /* 2 / 6 / 4 of a 12-track row: hosts is narrow but enough for ~20-char
+     hostnames + status tag; command-stream gets the bulk (ability dropdown,
+     step preview, args, output log); viewer keeps a usable width for the
+     live framebuffer. Previous 1fr 2fr 1.2fr left visible dead-zones on
+     wide laptop screens. */
+  grid-template-columns: 2fr 6fr 4fr;
   gap: 1rem;
   min-height: 70vh;
+  width: 100%;
 }
 
 .hosts-panel,
@@ -639,7 +645,23 @@ onMounted(() => {
   border: 1px solid #939393;
   border-radius: 4px;
   padding: 0.75rem;
+  min-width: 0; /* let grid tracks actually shrink instead of forcing
+                   their content's intrinsic min-width, which was widening
+                   the right column past its share. */
+}
+
+/* The hosts list and viewer can scroll their own bodies if needed; the
+   command-stream column intentionally does NOT clip overflow so the
+   ability dropdown menu can extend past the panel's bottom edge. The
+   inner io-log + step-list already have their own overflow:auto so we
+   don't lose any scrolling here. */
+.hosts-panel,
+.gui-viewer {
   overflow: auto;
+}
+.command-stream {
+  overflow: visible;
+  position: relative;
 }
 
 .hosts-list {
@@ -714,6 +736,37 @@ onMounted(() => {
 .dropdown.is-fullwidth,
 .dropdown-menu.is-fullwidth {
   width: 100%;
+}
+
+/* Ability-picker dropdown: the panel needs to be wide enough to show the
+   ability description (e.g. "Benign-human persona that mimics a developer
+   running git/build/test in a loop") without truncation, and it needs to
+   stack above neighbouring panel chrome. Bulma's default .dropdown-menu
+   inherits the trigger width via .is-fullwidth, which is too narrow when
+   the column is small. min-width + auto width lets it grow. */
+.dropdown.searchable .dropdown-menu {
+  min-width: 360px;
+  width: max-content;
+  max-width: min(560px, 90vw);
+  z-index: 60; /* above adjacent .field controls and panel borders */
+}
+
+.dropdown.searchable .dropdown-content {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+/* Allow each option's description to wrap onto a second line instead of
+   being single-line-truncated. The trigger (button) still shows just the
+   selected name, so this only affects the open menu. */
+.dropdown.searchable .dropdown-item {
+  white-space: normal;
+  line-height: 1.25;
+}
+.dropdown.searchable .dropdown-item p {
+  white-space: normal;
+  color: #939393;
+  margin-top: 0.15rem;
 }
 
 /* Step-preview list: dense, monospace step lines for HID abilities. */
