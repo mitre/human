@@ -303,5 +303,275 @@ class RunProfileSseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('no-such-vm', body['error'])
 
 
+# --- 3. platform-aware abilities (surf-the-web) regression --------------
+#
+# Regression for the bug where ``api_run_profile`` invoked
+# ``materialize_profile`` with no ``target_os``, which caused every
+# platform-shaped HID atomic ability (commit 8129246) to bomb with
+# ``KeyError: ability requires an OS to pick a platform branch ...``.
+# The endpoint now reads ``meta.json``'s ``os`` field (or accepts an
+# ``os=`` query override) and forwards it to the materializer. This
+# test wires the *real* surf-the-web profile and the *real* atomic
+# ability dir against a stub UDS and confirms the stream is pure
+# OperatorMessages — no shell-cradle ``cmd`` / ``sh`` payloads.
+
+class RunProfileSurfTheWebTests(unittest.IsolatedAsyncioTestCase):
+
+    async def asyncSetUp(self):
+        from pathlib import Path
+
+        from plugins.human.app import human_api
+        self.human_api_mod = human_api
+
+        self.tmpbase = tempfile.mkdtemp(prefix='test-microvms-surf-')
+        self.fixture_root = tempfile.mkdtemp(prefix='test-human-surf-')
+        self.sock_path = os.path.join(self.fixture_root, 'op.sock')
+
+        # meta.json with os=windows so the platform branch resolves.
+        run_dir = os.path.join(self.tmpbase, 'windows-victim-deadbeef')
+        os.makedirs(run_dir, exist_ok=True)
+        with open(os.path.join(run_dir, 'meta.json'), 'w') as f:
+            json.dump({
+                'vm_name': 'windows-victim',
+                'os': 'windows',
+                'input_daemon': {
+                    'socket': os.path.join(run_dir, 'input.sock'),
+                    'operator_socket': self.sock_path,
+                    'pid': 1234,
+                },
+            }, f)
+
+        # Point the plugin at the *shipped* surf-the-web profile + the
+        # real atomic ability dir.
+        plugin_root = (Path(__file__).resolve().parent.parent
+                       / 'data')
+        self._orig_base = human_api.MICROVM_RUNTIME_BASE
+        self._orig_adv = human_api.ADVERSARIES_DIR
+        self._orig_atomic = human_api.ATOMIC_ABILITIES_DIR
+        human_api.MICROVM_RUNTIME_BASE = self.tmpbase
+        human_api.ADVERSARIES_DIR = plugin_root / 'adversaries'
+        human_api.ATOMIC_ABILITIES_DIR = (
+            plugin_root / 'abilities' / 'benign-human-activity' / 'atomic')
+
+        # UDS listener in a background thread.
+        self.received = []
+        self._stop_evt = threading.Event()
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        srv.bind(self.sock_path)
+        srv.listen(1)
+        srv.settimeout(0.5)
+        self._server_sock = srv
+
+        def _serve():
+            conn = None
+            while not self._stop_evt.is_set():
+                try:
+                    conn, _ = srv.accept()
+                    break
+                except socket.timeout:
+                    continue
+                except OSError:
+                    return
+            if conn is None:
+                return
+            conn.settimeout(2.0)
+            buf = b''
+            try:
+                while not self._stop_evt.is_set():
+                    try:
+                        chunk = conn.recv(4096)
+                    except socket.timeout:
+                        continue
+                    if not chunk:
+                        break
+                    buf += chunk
+                    while b'\n' in buf:
+                        line, buf = buf.split(b'\n', 1)
+                        if line.strip():
+                            try:
+                                self.received.append(
+                                    json.loads(line.decode()))
+                            except Exception:
+                                self.received.append(
+                                    {'_raw': line.decode(errors='replace')})
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+        self._server_thread = threading.Thread(target=_serve, daemon=True)
+        self._server_thread.start()
+
+        # Bare aiohttp app wrapping the handler, no auth.
+        from aiohttp import web
+
+        class _AuthStub:
+            async def check_permissions(self, *a, **kw):
+                return None
+
+        class _DataStub:
+            async def locate(self, *a, **kw):
+                return []
+
+        services = {'auth_svc': _AuthStub(), 'data_svc': _DataStub()}
+        self.api = human_api.HumanApi(services, human_svc=None)
+        self.app = web.Application()
+        self.app.router.add_route(
+            'GET', '/plugin/human/api/run-profile', self.api.api_run_profile)
+
+        from aiohttp.test_utils import TestServer, TestClient
+        self.server = TestServer(self.app)
+        await self.server.start_server()
+        self.client = TestClient(self.server)
+        await self.client.start_server()
+
+    async def asyncTearDown(self):
+        try:
+            await self.client.close()
+        except Exception:
+            pass
+        try:
+            await self.server.close()
+        except Exception:
+            pass
+        self._stop_evt.set()
+        try:
+            self._server_sock.close()
+        except Exception:
+            pass
+        self._server_thread.join(timeout=2.0)
+
+        self.human_api_mod.MICROVM_RUNTIME_BASE = self._orig_base
+        self.human_api_mod.ADVERSARIES_DIR = self._orig_adv
+        self.human_api_mod.ATOMIC_ABILITIES_DIR = self._orig_atomic
+
+    async def test_surf_the_web_emits_only_hid_operator_messages(self):
+        """surf-the-web on a windows host must produce a pure HID stream.
+
+        Asserts:
+          - SSE response 200
+          - every received message has an `action` field
+          - every action is in the OperatorMessage vocabulary
+          - no message contains a shell-cradle key (cmd/sh/payload/workflow)
+        """
+        # OS resolves from meta.json (windows), so no `os=` override needed.
+        resp = await self.client.get(
+            '/plugin/human/api/run-profile',
+            params={'host_id': 'windows-victim',
+                    'profile_id': 'surf-the-web'})
+        self.assertEqual(resp.status, 200,
+                         f'unexpected status {resp.status}: '
+                         f'{await resp.text()}')
+        body = (await resp.read()).decode()
+        self.assertIn('"event": "done"', body,
+                      'SSE stream did not finish cleanly')
+
+        # Drain the UDS listener.
+        for _ in range(60):
+            if len(self.received) >= 30:
+                break
+            await asyncio.sleep(0.05)
+
+        self.assertGreater(len(self.received), 20,
+                           f'expected many HID OperatorMessages, got '
+                           f'{len(self.received)}')
+
+        op_actions = {
+            'move', 'click', 'press', 'keydown', 'keyup',
+            'type', 'dwell', 'wait_for', 'scroll', 'chord', 'raw',
+        }
+        shell_cradle_keys = {'cmd', 'sh', 'payload', 'workflow', 'command'}
+        for msg in self.received:
+            self.assertIsInstance(msg, dict)
+            self.assertIn('action', msg,
+                          f'message missing `action`: {msg!r}')
+            self.assertIn(msg['action'], op_actions,
+                          f'non-OperatorMessage action {msg["action"]!r} '
+                          f'in stream: {msg!r}')
+            for k in shell_cradle_keys:
+                self.assertNotIn(k, msg,
+                                 f'shell-cradle key {k!r} leaked into '
+                                 f'OperatorMessage: {msg!r}')
+
+        # First two messages must be the open-default-browser launcher
+        # chord on Windows (LeftMeta+r), proving the platform branch
+        # resolved correctly.
+        self.assertEqual(self.received[0]['action'], 'chord')
+        self.assertEqual(self.received[0]['keys'], ['LeftMeta', 'r'])
+        self.assertEqual(self.received[1]['action'], 'dwell')
+
+    async def test_os_query_override_picks_platform_branch(self):
+        """Caller may force a platform branch via ?os=darwin."""
+        resp = await self.client.get(
+            '/plugin/human/api/run-profile',
+            params={'host_id': 'windows-victim',
+                    'profile_id': 'surf-the-web',
+                    'os': 'darwin'})
+        self.assertEqual(resp.status, 200)
+        for _ in range(60):
+            if len(self.received) >= 1:
+                break
+            await asyncio.sleep(0.05)
+        # On macOS the open-default-browser launcher is Cmd+Space.
+        self.assertGreater(len(self.received), 0)
+        self.assertEqual(self.received[0]['action'], 'chord')
+        self.assertEqual(self.received[0]['keys'], ['LeftMeta', 'space'])
+
+
+# --- 4. _resolve_target_os unit tests -----------------------------------
+
+class ResolveTargetOsTests(unittest.TestCase):
+
+    def setUp(self):
+        from plugins.human.app import human_api
+        self.human_api_mod = human_api
+        self.HumanApi = human_api.HumanApi
+        self.tmpbase = tempfile.mkdtemp(prefix='test-microvms-os-')
+        self._orig_base = human_api.MICROVM_RUNTIME_BASE
+        human_api.MICROVM_RUNTIME_BASE = self.tmpbase
+
+    def tearDown(self):
+        self.human_api_mod.MICROVM_RUNTIME_BASE = self._orig_base
+        for root, dirs, files in os.walk(self.tmpbase, topdown=False):
+            for f in files:
+                try:
+                    os.unlink(os.path.join(root, f))
+                except OSError:
+                    pass
+            for d in dirs:
+                try:
+                    os.rmdir(os.path.join(root, d))
+                except OSError:
+                    pass
+        try:
+            os.rmdir(self.tmpbase)
+        except OSError:
+            pass
+
+    def _write_meta(self, host_id, payload):
+        run_dir = os.path.join(self.tmpbase, f'{host_id}-aaaa')
+        os.makedirs(run_dir, exist_ok=True)
+        with open(os.path.join(run_dir, 'meta.json'), 'w') as f:
+            json.dump(payload, f)
+
+    def test_reads_os_from_meta(self):
+        self._write_meta('vm1', {'os': 'windows'})
+        self.assertEqual(self.HumanApi._resolve_target_os('vm1'), 'windows')
+
+    def test_normalizes_macos_synonym(self):
+        self._write_meta('vm2', {'os': 'macOS'})
+        self.assertEqual(self.HumanApi._resolve_target_os('vm2'), 'darwin')
+
+    def test_override_wins(self):
+        self._write_meta('vm3', {'os': 'windows'})
+        self.assertEqual(
+            self.HumanApi._resolve_target_os('vm3', override='linux'),
+            'linux')
+
+    def test_missing_meta_returns_empty(self):
+        self.assertEqual(self.HumanApi._resolve_target_os('nope'), '')
+
+
 if __name__ == '__main__':
     unittest.main()

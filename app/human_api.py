@@ -163,11 +163,13 @@ class HumanApi:
         event with the playback URL once the MP4 is finalized.
         """
         # Accept GET (query string, easy for EventSource) or POST (body).
+        os_override = None
         if request.method == 'GET':
             host_id = request.query.get('host_id')
             profile_id = request.query.get('profile_id')
             args_raw = request.query.get('args')
             record = _parse_bool(request.query.get('record'))
+            os_override = request.query.get('os')
             try:
                 call_args = json.loads(args_raw) if args_raw else {}
             except Exception:
@@ -185,6 +187,7 @@ class HumanApi:
             profile_id = body.get('profile_id')
             call_args = body.get('args') or {}
             record = _parse_bool(body.get('record'))
+            os_override = body.get('os')
 
         if not host_id or not profile_id:
             return web.json_response(
@@ -204,6 +207,19 @@ class HumanApi:
             return web.json_response(
                 {'status': 'error', 'error': msg}, status=400)
 
+        # Resolve target OS for platform-aware ability dispatch. The
+        # new HID atomic abilities (commit 8129246) use
+        # `platforms.{windows,linux,darwin}.steps` and the materializer
+        # raises if no OS is provided. Order of precedence:
+        #   1. explicit query/body `os` (lets a tester force a branch)
+        #   2. meta.json `os` field for the target host
+        # Fall back to '' which preserves the legacy hid.steps path for
+        # any older single-platform abilities still in flight.
+        try:
+            target_os = self._resolve_target_os(host_id, os_override)
+        except Exception:  # noqa: BLE001 — best-effort, fall through to ''
+            target_os = ''
+
         # Resolve and load the profile.
         try:
             profile, abilities = self._load_profile_and_abilities(profile_id)
@@ -219,7 +235,9 @@ class HumanApi:
             from plugins.human.pyhuman.profile_materializer import (
                 materialize_profile,
             )
-            messages = materialize_profile(profile, abilities)
+            messages = materialize_profile(
+                profile, abilities, target_os=target_os,
+            )
         except Exception as e:
             traceback.print_exc()
             return web.json_response(
@@ -375,6 +393,39 @@ class HumanApi:
                         pass
 
     # --- helpers ------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_target_os(host_id: str, override: str | None = None) -> str:
+        """Return the normalized target OS for ``host_id``.
+
+        Order of precedence:
+          1. ``override`` if non-empty (caller-supplied query/body field).
+          2. ``os`` (or ``platform``) field in the host's meta.json.
+          3. '' (caller falls back to legacy hid.steps).
+
+        Reuses the same ``<BASE>/<host_id>-*/meta.json`` discovery as
+        ``_resolve_operator_socket`` so the two stay in lockstep. Lazy-
+        imports the materializer's ``normalize_os`` helper to keep the
+        synonym map (mac/macos/osx -> darwin, win -> windows) in one
+        place.
+        """
+        from plugins.human.pyhuman.profile_materializer import normalize_os
+        if override:
+            return normalize_os(override)
+        pattern = os.path.join(MICROVM_RUNTIME_BASE, f'{host_id}-*')
+        matches = sorted(glob.glob(pattern))
+        exact = os.path.join(MICROVM_RUNTIME_BASE, host_id)
+        if os.path.isdir(exact):
+            matches.append(exact)
+        if not matches:
+            return ''
+        meta_path = os.path.join(matches[0], 'meta.json')
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+        except (OSError, ValueError):
+            return ''
+        return normalize_os(meta.get('os') or meta.get('platform') or '')
 
     @staticmethod
     def _resolve_operator_socket(host_id: str) -> str:
