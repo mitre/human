@@ -2,11 +2,49 @@
   <div class="human-live">
     <!-- HEADER ============================================================ -->
     <section class="human-header mb-2">
-      <h2 class="title is-4">
-        Human (Live)
-        <span class="subtitle is-6 ml-2" v-if="rangeProfileName">
-          — {{ rangeProfileName }} ({{ hosts.length }} hosts)
-        </span>
+      <h2 class="title is-4 is-flex is-align-items-center">
+        <span>Human (Live)</span>
+        <!-- Profile-switcher dropdown. Mirrors the Range plugin's profile
+             picker (plugins/range/gui/views/range.vue) but fetches the
+             cloud + on-prem profile lists itself rather than importing
+             a Range component cross-plugin. The Range plugin does not
+             expose a "set active profile" route — active profile is
+             tracked client-side (localStorage), so this dropdown is
+             effectively display + scope-refresh. See switchProfile(). -->
+        <div class="dropdown profile-switcher ml-3" :class="{ 'is-active': profileDropdownOpen }">
+          <div class="dropdown-trigger">
+            <button
+              class="button is-small is-dark"
+              type="button"
+              aria-haspopup="true"
+              aria-controls="profile-switcher-menu"
+              @click="profileDropdownOpen = !profileDropdownOpen"
+            >
+              <span>{{ rangeProfileName || 'Select profile' }}</span>
+              <span class="icon is-small">
+                <i class="fas fa-chevron-down"></i>
+              </span>
+            </button>
+          </div>
+          <div class="dropdown-menu" id="profile-switcher-menu" role="menu">
+            <div class="dropdown-content">
+              <a
+                class="dropdown-item"
+                v-for="p in availableProfiles"
+                :key="p.id"
+                :class="{ 'is-active': p.id === activeProfileId }"
+                @click="switchProfile(p.id); profileDropdownOpen = false"
+              >
+                <strong>{{ p.name || p.id }}</strong>
+                <small class="ml-2 has-text-grey">{{ p.range || '' }}</small>
+              </a>
+              <div v-if="!availableProfiles.length" class="dropdown-item">
+                <em>No profiles available</em>
+              </div>
+            </div>
+          </div>
+        </div>
+        <span class="subtitle is-6 ml-2 has-text-grey">({{ hosts.length }} hosts)</span>
       </h2>
       <div class="is-flex is-align-items-center">
         <button class="button is-dark is-small mr-2" @click="refreshAll" :disabled="loading">
@@ -289,12 +327,22 @@
         </div>
       </section>
     </div>
+
+    <!-- RECORDINGS SECTION =================================================
+         Collapsible browser for past recorded runs. Lives BELOW the main
+         3-row grid so it doesn't compete with the live framebuffer for
+         vertical real estate. Default state is collapsed; expanding it
+         fetches /plugin/human/api/recordings. The runProfileSse handler
+         calls .autoRefreshAfterRecording() on the recordings_ready SSE
+         event so a fresh MP4 pops to the top without a page reload. -->
+    <RecordingsBrowser ref="recordingsBrowserRef" />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, inject } from 'vue'
 import LiveEndpointViewer from '../components/LiveEndpointViewer.vue'
+import RecordingsBrowser from '../components/RecordingsBrowser.vue'
 
 // Mirrors range.vue (line 357): the host app injects $api for HTTP calls.
 const $api = inject('$api')
@@ -311,6 +359,15 @@ const adhocInput = ref('')
 const hostFilter = ref('')
 const loading = ref(false)
 const rangeProfileName = ref('')       // populated from /hosts response if available
+// Profile-switcher state. availableProfiles is fetched from the Range
+// plugin's GET /plugin/range/profiles + /plugin/range/onprem/profiles
+// endpoints (read-only cross-plugin call). activeProfileId tracks the
+// currently-selected profile; persisted to localStorage so reloads
+// remember the choice (mirrors how Range tracks selection client-side
+// — Range exposes no "set active profile" server route).
+const availableProfiles = ref([])      // [{id, name, range}]
+const activeProfileId = ref('')
+const profileDropdownOpen = ref(false)
 // Mirrors LiveEndpointViewer's collapsed state so the page-grid can
 // reflow when the section is collapsed (giving the freed vertical
 // space to the command stream below). Session-only.
@@ -323,6 +380,10 @@ const record = ref(false)
 // Filled in by the SSE `recording_ready` event after a recorded run.
 const recordingUrl = ref(null)
 const recordingPath = ref(null)
+// RecordingsBrowser exposes a refresh() / autoRefreshAfterRecording()
+// pair via defineExpose; we hold a template ref so runProfileSse can
+// poke it once the recorder finalizes a fresh MP4.
+const recordingsBrowserRef = ref(null)
 
 const MAX_LOG_LINES = 200
 
@@ -494,6 +555,60 @@ async function fetchWorkflows() {
   }
 }
 
+// Fetch the union of cloud + on-prem profiles registered with the Range
+// plugin. Both endpoints are read-only and don't require any state from
+// the Range plugin (they parse the on-disk yaml). On failure we fall
+// back to a single synthetic "(active range)" entry so the dropdown
+// trigger still reflects whatever rangeProfileName we got from /hosts.
+async function loadProfiles() {
+  const collected = []
+  const fetchOne = async (url, range) => {
+    try {
+      const res = await $api.get(url)
+      const list = res.data?.profiles || []
+      for (const p of list) {
+        const name = p.profile || p.name || p.id
+        if (!name) continue
+        collected.push({ id: name, name, range: range })
+      }
+    } catch (err) {
+      // Range plugin may be absent or endpoint unreachable; not fatal.
+      console.warn(`[human] loadProfiles: ${url} failed`, err)
+    }
+  }
+  await Promise.all([
+    fetchOne('/plugin/range/profiles', 'cloud'),
+    fetchOne('/plugin/range/onprem/profiles', 'onprem'),
+  ])
+  availableProfiles.value = collected
+  // Restore prior selection from localStorage (Range does the same
+  // client-side, so picking a profile here mirrors the Range view).
+  try {
+    const saved = localStorage.getItem('human_active_profile')
+    if (saved && collected.some(p => p.id === saved)) {
+      activeProfileId.value = saved
+      rangeProfileName.value = saved
+    } else if (rangeProfileName.value) {
+      // /hosts already gave us a profile name — adopt it.
+      activeProfileId.value = rangeProfileName.value
+    }
+  } catch (_) { /* ignore localStorage failures */ }
+}
+
+// Switching profile: the Range plugin has no server-side "set active
+// profile" route, so we update local state and refetch hosts. If a
+// future Range release adds POST /plugin/range/active-profile, drop
+// it in below — until then this is display-only (still useful to see
+// which profile you're operating on, and to scope the host list
+// refetch off of localStorage).
+async function switchProfile(profileId) {
+  if (!profileId) return
+  activeProfileId.value = profileId
+  rangeProfileName.value = profileId
+  try { localStorage.setItem('human_active_profile', profileId) } catch (_) {}
+  await refreshAll()
+}
+
 async function refreshAll() {
   loading.value = true
   try {
@@ -609,6 +724,12 @@ function runProfileSse(host_id, profile_id, assignment) {
       recordingUrl.value = payload.url
       recordingPath.value = payload.path
       appendLog(host_id, 'stdout', `[recording] ready -> ${payload.url}`)
+      // Pop the new MP4 into the Recordings dropdown without a page
+      // reload. autoRefreshAfterRecording() also expands the section
+      // so the operator sees the new entry immediately.
+      try {
+        recordingsBrowserRef.value?.autoRefreshAfterRecording()
+      } catch (_) { /* component not mounted yet — fine */ }
       es.close()
     } else if (payload.event === 'recording_error') {
       appendLog(host_id, 'stderr', `[recording] ${payload.error}`)
@@ -663,8 +784,11 @@ function handleRunResponse(host_id, data) {
 }
 
 // ---- Lifecycle -----------------------------------------------------------
-onMounted(() => {
-  refreshAll()
+onMounted(async () => {
+  // Refresh hosts/workflows first so rangeProfileName is populated;
+  // loadProfiles can then prefer that over the localStorage fallback.
+  await refreshAll()
+  await loadProfiles()
 })
 </script>
 
@@ -691,6 +815,21 @@ onMounted(() => {
   border-bottom: 1px solid #555;
   padding-bottom: 0.5rem;
   flex: 0 0 auto;
+}
+
+/* Profile-switcher dropdown in the page header. The chevron lives inside
+   a Bulma .icon, which Caldera-core's dark theme sometimes leaves at the
+   default body color (invisible against #1b1b1b). Force the muted-text
+   color used elsewhere in this view so the indicator is visible. */
+.dropdown.profile-switcher .button .icon i {
+  color: #939393;
+}
+.dropdown.profile-switcher .dropdown-menu {
+  min-width: 14rem;
+}
+.dropdown.profile-switcher .dropdown-item.is-active {
+  background-color: #191970;
+  color: #ffffff;
 }
 
 /* Vertical 3-row layout:
