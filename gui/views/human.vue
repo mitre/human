@@ -20,197 +20,250 @@
       </div>
     </section>
 
-    <div class="human-grid">
-      <!-- HOSTS PANEL (left) ============================================== -->
-      <aside class="hosts-panel">
-        <h3 class="title is-6">Hosts</h3>
-        <input
-          class="input is-small mb-2"
-          type="text"
-          placeholder="Filter hosts..."
-          v-model="hostFilter"
-        />
-        <ul class="hosts-list">
-          <li
-            v-for="host in filteredHosts"
-            :key="host.id"
-            :class="{ 'is-selected': selectedHostId === host.id }"
-            @click="selectHost(host.id)"
-          >
-            <div class="host-row">
-              <span class="host-name">{{ host.name || host.id }}</span>
-              <span
-                class="tag is-small"
-                :class="statusTagClass(assignments[host.id]?.status)"
-              >
-                {{ assignments[host.id]?.status || 'idle' }}
-              </span>
-            </div>
-            <div class="host-meta">
-              <small>{{ host.ip || '—' }}</small>
-            </div>
-          </li>
-          <li v-if="filteredHosts.length === 0" class="has-text-centered has-text-grey">
-            <em>No hosts</em>
-          </li>
-        </ul>
-      </aside>
+    <!-- LAYOUT GRID =======================================================
+         Row 1 (auto): hosts panel + selected-host detail (side-by-side
+                       narrow strip, ~150-220px tall).
+         Row 2 (1fr) : live endpoint viewer (LiveEndpointViewer.vue) — fills
+                       remaining vertical space, capped to 1024x768.
+         Row 3 (auto): command stream (ability picker / args / record /
+                       output) split into sub-columns.
 
-      <!-- COMMAND STREAM (center) ========================================= -->
-      <main class="command-stream">
-        <div v-if="!selectedHost" class="notification is-dark has-text-centered">
-          <p><em>Select a host on the left to assign human abilities or send commands.</em></p>
+         The viewer is the dominant visual surface; the command stream
+         stays ergonomic but secondary. -->
+    <div class="human-grid">
+
+      <!-- ROW 1: HOSTS + SELECTED-HOST DETAIL ============================ -->
+      <section class="row-hosts">
+        <aside class="hosts-panel">
+          <h3 class="title is-6 mb-1">Hosts</h3>
+          <input
+            class="input is-small mb-2"
+            type="text"
+            placeholder="Filter hosts..."
+            v-model="hostFilter"
+          />
+          <ul class="hosts-list">
+            <li
+              v-for="host in filteredHosts"
+              :key="host.id"
+              :class="{ 'is-selected': selectedHostId === host.id }"
+              @click="selectHost(host.id)"
+            >
+              <div class="host-row">
+                <span class="host-name">{{ host.name || host.id }}</span>
+                <span
+                  class="tag is-small"
+                  :class="statusTagClass(assignments[host.id]?.status)"
+                >
+                  {{ assignments[host.id]?.status || 'idle' }}
+                </span>
+              </div>
+              <div class="host-meta">
+                <small>{{ host.ip || '—' }}</small>
+              </div>
+            </li>
+            <li v-if="filteredHosts.length === 0" class="has-text-centered has-text-grey">
+              <em>No hosts</em>
+            </li>
+          </ul>
+        </aside>
+
+        <aside class="selected-host-info">
+          <div v-if="!selectedHost" class="notification is-dark m-0 p-3 has-text-centered">
+            <p><em>Select a host on the left to assign human abilities or send commands.</em></p>
+          </div>
+          <div v-else>
+            <h3 class="title is-5 mb-1">{{ selectedHost.name || selectedHost.id }}</h3>
+            <p class="is-size-7 mb-1">
+              <strong>IP:</strong> <code>{{ selectedHost.ip || '—' }}</code>
+              <span class="ml-3">
+                <strong>Status:</strong>
+                <span
+                  class="tag is-small ml-1"
+                  :class="statusTagClass(assignments[selectedHostId]?.status)"
+                >
+                  {{ assignments[selectedHostId]?.status || 'idle' }}
+                </span>
+              </span>
+            </p>
+            <p class="is-size-7 mb-1">
+              <strong>Endpoint:</strong>
+              <code v-if="selectedHost.vnc_ws">{{ selectedHost.vnc_ws }}</code>
+              <span v-else class="has-text-grey">
+                no <code>vnc_ws</code> registered (stub / non-GUI)
+              </span>
+            </p>
+            <p class="is-size-7 has-text-grey">
+              <strong>ID:</strong> <code>{{ selectedHost.id }}</code>
+            </p>
+          </div>
+        </aside>
+      </section>
+
+      <!-- ROW 2: LIVE ENDPOINT VIEWER ====================================
+           v-if (NOT v-show) on the inner component path so noVNC's RFB
+           constructor never fires against an unmounted/empty target. The
+           component itself also gates connect() on `vmName` being non-
+           empty, but we belt-and-suspenders this by only mounting once
+           we have a host. -->
+      <section class="row-viewer">
+        <LiveEndpointViewer :vm-name="liveEndpointVmName">
+          <template #header-extra>
+            <span
+              v-if="currentStepIdx != null && selectedAbilitySteps.length"
+              class="tag is-link is-small ml-2"
+            >
+              step {{ currentStepIdx + 1 }} / {{ selectedAbilitySteps.length }}
+            </span>
+          </template>
+        </LiveEndpointViewer>
+      </section>
+
+      <!-- ROW 3: COMMAND STREAM (ability / args / record / output) ======
+           Split into three sub-columns inside one row so the operator can
+           see the picker, the args/run controls, and the live output log
+           at a glance without scrolling. -->
+      <section class="row-command">
+        <div v-if="!selectedHost" class="notification is-dark m-0 p-3 has-text-centered">
+          <p><em>Select a host above to assign human abilities or send commands.</em></p>
         </div>
 
-        <div v-else>
-          <h3 class="title is-5">{{ selectedHost.name || selectedHost.id }}</h3>
+        <div v-else class="command-grid">
 
-          <!-- Human-ability dropdown (mirrors range.vue:27-56 pattern) -->
-          <div class="field">
-            <label class="label is-small">Human Ability</label>
-            <div
-              class="dropdown searchable is-flex-grow-1"
-              :class="{ 'is-active': isDropdownOpen }"
-            >
-              <div class="dropdown-trigger">
-                <button
-                  class="button is-fullwidth"
-                  type="button"
-                  aria-haspopup="true"
-                  aria-controls="workflow-dropdown-menu"
-                  @click="isDropdownOpen = !isDropdownOpen"
-                >
-                  <span>{{ selectedWorkflowName || 'Select Human Ability' }}</span>
-                  <span class="icon is-small">
-                    <i class="fas fa-angle-down"></i>
-                  </span>
-                </button>
+          <!-- COL 1: Ability picker + step preview -->
+          <div class="cmd-col cmd-ability">
+            <div class="field">
+              <label class="label is-small">Human Ability</label>
+              <div
+                class="dropdown searchable is-flex-grow-1"
+                :class="{ 'is-active': isDropdownOpen }"
+              >
+                <div class="dropdown-trigger">
+                  <button
+                    class="button is-fullwidth"
+                    type="button"
+                    aria-haspopup="true"
+                    aria-controls="workflow-dropdown-menu"
+                    @click="isDropdownOpen = !isDropdownOpen"
+                  >
+                    <span>{{ selectedWorkflowName || 'Select Human Ability' }}</span>
+                    <span class="icon is-small">
+                      <i class="fas fa-angle-down"></i>
+                    </span>
+                  </button>
+                </div>
+                <div class="dropdown-menu is-fullwidth" id="workflow-dropdown-menu" role="menu">
+                  <div class="dropdown-content">
+                    <a
+                      class="dropdown-item"
+                      v-for="wf in workflows"
+                      :key="wf.id"
+                      :class="{ 'is-active': assignments[selectedHostId]?.workflow_id === wf.id }"
+                      @click="assignWorkflow(wf); isDropdownOpen = false"
+                    >
+                      <strong>{{ wf.name }}</strong>
+                      <p class="is-size-7">{{ wf.description }}</p>
+                    </a>
+                    <p
+                      class="has-text-centered"
+                      v-if="workflows.length === 0"
+                    >
+                      No human abilities available
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div class="dropdown-menu is-fullwidth" id="workflow-dropdown-menu" role="menu">
-                <div class="dropdown-content">
-                  <a
-                    class="dropdown-item"
-                    v-for="wf in workflows"
-                    :key="wf.id"
-                    :class="{ 'is-active': assignments[selectedHostId]?.workflow_id === wf.id }"
-                    @click="assignWorkflow(wf); isDropdownOpen = false"
+            </div>
+
+            <div v-if="selectedAbilitySteps.length" class="step-preview">
+              <div class="is-flex is-justify-content-space-between is-align-items-baseline">
+                <h4 class="title is-6 mb-1">Step preview</h4>
+                <small class="has-text-grey">
+                  {{ selectedAbilitySteps.length }} steps
+                  · ~{{ selectedAbilityDurationS }}s
+                </small>
+              </div>
+              <ol class="step-list">
+                <li v-for="(s, i) in selectedAbilitySteps" :key="i" class="step-row">
+                  <span class="step-idx has-text-grey">{{ i + 1 }}</span>
+                  <span class="step-action tag is-dark is-small">{{ s.action }}</span>
+                  <span class="step-detail">{{ stepDetail(s) }}</span>
+                </li>
+              </ol>
+            </div>
+            <div v-else-if="selectedWorkflowName" class="notification is-dark py-2 px-3">
+              <p class="is-size-7">
+                Legacy shell-cradle ability (no HID step-list). It will run as
+                a single shell command via sandcat, not through the input
+                daemon.
+              </p>
+            </div>
+          </div>
+
+          <!-- COL 2: Args + Run + Record toggle + Ad-hoc -->
+          <div class="cmd-col cmd-args">
+            <div class="field">
+              <label class="label is-small">Args (passed to human ability)</label>
+              <div class="field has-addons mb-1">
+                <div class="control is-expanded">
+                  <input
+                    class="input is-small"
+                    type="text"
+                    placeholder="--flag value ..."
+                    v-model="argsInput"
+                    @keyup.enter="runAssignedWorkflow"
+                  />
+                </div>
+                <div class="control">
+                  <button
+                    class="button is-dark is-small"
+                    :disabled="!assignments[selectedHostId]?.workflow_id"
+                    @click="runAssignedWorkflow"
                   >
-                    <strong>{{ wf.name }}</strong>
-                    <p class="is-size-7">{{ wf.description }}</p>
-                  </a>
-                  <p
-                    class="has-text-centered"
-                    v-if="workflows.length === 0"
-                  >
-                    No human abilities available
-                  </p>
+                    Run
+                  </button>
+                </div>
+              </div>
+              <label class="checkbox is-size-7">
+                <input type="checkbox" v-model="record" />
+                Record this run (MP4 of framebuffer)
+              </label>
+            </div>
+
+            <div v-if="recordingUrl" class="recording-panel">
+              <h4 class="title is-6 mb-1">Recording</h4>
+              <video controls :src="recordingUrl" class="recording-video"></video>
+              <p class="is-size-7 mt-1">
+                <a :href="recordingUrl" download>Download MP4</a>
+                <span class="has-text-grey ml-2" v-if="recordingPath">
+                  ({{ recordingPath }})
+                </span>
+              </p>
+            </div>
+
+            <div class="field">
+              <label class="label is-small">Ad-hoc command</label>
+              <div class="field has-addons">
+                <div class="control is-expanded">
+                  <input
+                    class="input is-small"
+                    type="text"
+                    placeholder="raw command line..."
+                    v-model="adhocInput"
+                    @keyup.enter="runAdhoc"
+                  />
+                </div>
+                <div class="control">
+                  <button class="button is-dark is-small" @click="runAdhoc" :disabled="!adhocInput.trim()">
+                    Send
+                  </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- HID step preview ============================================ -->
-          <!-- Shows the action sequence (move/click/type/dwell) that this
-               ability will replay through the vhost-user-input daemon. The
-               whole point of the rewrite is that abilities are NOT shell
-               cradles — they're step-lists of HID events. The viewer below
-               will show the actual cursor + keystrokes hit the guest. -->
-          <div v-if="selectedAbilitySteps.length" class="step-preview mb-3">
-            <div class="is-flex is-justify-content-space-between is-align-items-baseline">
-              <h4 class="title is-6 mb-1">Step preview</h4>
-              <small class="has-text-grey">
-                {{ selectedAbilitySteps.length }} steps
-                · ~{{ selectedAbilityDurationS }}s estimated
-              </small>
-            </div>
-            <ol class="step-list">
-              <li v-for="(s, i) in selectedAbilitySteps" :key="i" class="step-row">
-                <span class="step-idx has-text-grey">{{ i + 1 }}</span>
-                <span class="step-action tag is-dark is-small">{{ s.action }}</span>
-                <span class="step-detail">{{ stepDetail(s) }}</span>
-              </li>
-            </ol>
-          </div>
-          <div v-else-if="selectedWorkflowName" class="notification is-dark py-2 px-3 mb-3">
-            <p class="is-size-7">
-              Legacy shell-cradle ability (no HID step-list). It will run as
-              a single shell command via sandcat, not through the input
-              daemon. Convert to the HID format
-              (<code>data/abilities/HID_ABILITY_SCHEMA.md</code>) for real
-              human emulation.
-            </p>
-          </div>
-
-          <!-- Args + Run -->
-          <div class="field">
-            <label class="label is-small">Args (passed to human ability)</label>
-            <div class="field has-addons">
-              <div class="control is-expanded">
-                <input
-                  class="input is-small"
-                  type="text"
-                  placeholder="--flag value ..."
-                  v-model="argsInput"
-                  @keyup.enter="runAssignedWorkflow"
-                />
-              </div>
-              <div class="control">
-                <button
-                  class="button is-dark is-small"
-                  :disabled="!assignments[selectedHostId]?.workflow_id"
-                  @click="runAssignedWorkflow"
-                >
-                  Run
-                </button>
-              </div>
-            </div>
-            <!-- Record-this-run toggle. Wires through to api_run_profile?record=true,
-                 which spawns an RfbRecorder against the GPU daemon's framebuffer for
-                 the duration of the profile run. The MP4 lands inline in the panel
-                 below (and as a download link) once the run finishes. -->
-            <label class="checkbox is-size-7 mt-2">
-              <input type="checkbox" v-model="record" />
-              Record this run (MP4 video of the framebuffer)
-            </label>
-          </div>
-
-          <!-- Recording playback. Rendered inline once the SSE
-               stream emits ``recording_ready``; before that this
-               block is hidden. -->
-          <div v-if="recordingUrl" class="recording-panel mt-3">
-            <h4 class="title is-6 mb-1">Recording</h4>
-            <video controls :src="recordingUrl" class="recording-video"></video>
-            <p class="is-size-7 mt-1">
-              <a :href="recordingUrl" download>Download MP4</a>
-              <span class="has-text-grey ml-2" v-if="recordingPath">
-                ({{ recordingPath }})
-              </span>
-            </p>
-          </div>
-
-          <!-- Free-form ad-hoc command -->
-          <div class="field">
-            <label class="label is-small">Ad-hoc command</label>
-            <div class="field has-addons">
-              <div class="control is-expanded">
-                <input
-                  class="input is-small"
-                  type="text"
-                  placeholder="raw command line..."
-                  v-model="adhocInput"
-                  @keyup.enter="runAdhoc"
-                />
-              </div>
-              <div class="control">
-                <button class="button is-dark is-small" @click="runAdhoc" :disabled="!adhocInput.trim()">
-                  Send
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Live I/O log -->
-          <div class="io-panel">
+          <!-- COL 3: Output -->
+          <div class="cmd-col cmd-output">
             <h4 class="title is-6 mb-2">Output</h4>
             <pre class="io-log">
 <template v-for="(entry, i) in scopedCommandLog" :key="i"><span :class="['io-line', 'io-' + entry.direction]">[{{ formatTs(entry.ts) }}] [{{ entry.direction }}] {{ entry.line }}
@@ -218,49 +271,16 @@
 <span v-if="scopedCommandLog.length === 0" class="has-text-grey">(no output yet)</span>
             </pre>
           </div>
-        </div>
-      </main>
 
-      <!-- GUI VIEWER (right) ============================================== -->
-      <!-- Live framebuffer of the selected host. The vhost-user-gpu-2d
-           daemon (timestone/vhost-user-daemons/) renders the guest's
-           virtio-gpu surface and serves it over RFB; a host-side
-           websockify proxy bridges that to a websocket the noVNC
-           component below consumes. The host's `vnc_ws` field is set
-           by the Range provider when `session_type: gui` is on the
-           image and the GPU daemon is alive. -->
-      <aside class="gui-viewer">
-        <h3 class="title is-6">
-          Live Endpoint
-          <span v-if="currentStepIdx != null" class="tag is-link is-small ml-2">
-            step {{ currentStepIdx + 1 }} / {{ selectedAbilitySteps.length }}
-          </span>
-        </h3>
-        <div v-if="selectedHost && selectedHost.vnc_ws" class="vnc-wrapper">
-          <iframe :src="selectedHost.vnc_ws" class="vnc-frame"></iframe>
         </div>
-        <div v-else class="notification is-dark todo-panel">
-          <p>
-            <strong>Viewer not connected.</strong> The host has no
-            <code>vnc_ws</code> yet — the vhost-user-gpu-2d daemon for
-            this microVM either isn't running, or its websockify bridge
-            hasn't been registered with the Range provider.
-          </p>
-          <p class="is-size-7 mt-2">
-            Selected host: <code>{{ selectedHost?.id || '—' }}</code>
-          </p>
-          <p class="is-size-7 mt-2">
-            Spawn the daemon manually for this host:<br/>
-            <code class="is-size-7">vhost-user-gpu-2d --socket /tmp/ts-gpu-{{ selectedHost?.id || 'X' }}.sock --vnc 127.0.0.1:5900</code>
-          </p>
-        </div>
-      </aside>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, inject } from 'vue'
+import LiveEndpointViewer from '../components/LiveEndpointViewer.vue'
 
 // Mirrors range.vue (line 357): the host app injects $api for HTTP calls.
 const $api = inject('$api')
@@ -313,6 +333,16 @@ const filteredHosts = computed(() => {
 const scopedCommandLog = computed(() =>
   commandLog.value.filter(e => e.host_id === selectedHostId.value)
 )
+
+// LiveEndpointViewer takes a vmName. Range's WS proxy keys on the VM/host
+// name, which on our side maps to the host record's `name` (falling back
+// to `id`). When no host is selected we pass an empty string and the
+// component renders its placeholder without instantiating RFB.
+const liveEndpointVmName = computed(() => {
+  const h = selectedHost.value
+  if (!h) return ''
+  return h.name || h.id || ''
+})
 
 // ---- HID step preview ----------------------------------------------------
 // `selectedAbilitySteps` is the list of HID steps for the currently-selected
@@ -615,6 +645,10 @@ onMounted(() => {
 */
 .human-live {
   padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px); /* leave room for Caldera's top nav */
+  min-height: 600px;
 }
 
 .human-header {
@@ -623,45 +657,41 @@ onMounted(() => {
   justify-content: space-between;
   border-bottom: 1px solid #555;
   padding-bottom: 0.5rem;
+  flex: 0 0 auto;
 }
 
+/* Vertical 3-row layout:
+     auto  hosts row  (fixed-height strip, ~200px)
+     1fr   viewer row (fills remaining vertical space)
+     auto  command stream (sub-grid of 3 columns)
+   The 1fr row lets the LiveEndpointViewer dominate the visible area —
+   that's the whole point of this restructure. */
 .human-grid {
   display: grid;
-  /* 2 / 6 / 4 of a 12-track row: hosts is narrow but enough for ~20-char
-     hostnames + status tag; command-stream gets the bulk (ability dropdown,
-     step preview, args, output log); viewer keeps a usable width for the
-     live framebuffer. Previous 1fr 2fr 1.2fr left visible dead-zones on
-     wide laptop screens. */
-  grid-template-columns: 2fr 6fr 4fr;
-  gap: 1rem;
-  min-height: 70vh;
-  width: 100%;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ---------------- Row 1: hosts + selected-host ---------------- */
+.row-hosts {
+  display: grid;
+  grid-template-columns: 1fr 3fr;
+  gap: 0.75rem;
+  height: 200px;
+  min-height: 0;
 }
 
 .hosts-panel,
-.command-stream,
-.gui-viewer {
+.selected-host-info {
   background-color: #272727;
   border: 1px solid #939393;
   border-radius: 4px;
   padding: 0.75rem;
-  min-width: 0; /* let grid tracks actually shrink instead of forcing
-                   their content's intrinsic min-width, which was widening
-                   the right column past its share. */
-}
-
-/* The hosts list and viewer can scroll their own bodies if needed; the
-   command-stream column intentionally does NOT clip overflow so the
-   ability dropdown menu can extend past the panel's bottom edge. The
-   inner io-log + step-list already have their own overflow:auto so we
-   don't lose any scrolling here. */
-.hosts-panel,
-.gui-viewer {
   overflow: auto;
-}
-.command-stream {
-  overflow: visible;
-  position: relative;
+  min-width: 0;
+  min-height: 0;
 }
 
 .hosts-list {
@@ -696,42 +726,74 @@ onMounted(() => {
   color: #939393;
 }
 
-.io-panel {
-  margin-top: 1rem;
+/* ---------------- Row 2: live endpoint viewer ----------------- */
+.row-viewer {
+  background-color: #272727;
+  border: 1px solid #939393;
+  border-radius: 4px;
+  padding: 0.75rem;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The LiveEndpointViewer fills .row-viewer; its CSS internally caps the
+   canvas to 4:3 / 1024x768 and centers it. */
+.row-viewer > :deep(.live-endpoint) {
+  height: 100%;
+  min-height: 0;
+}
+
+/* ---------------- Row 3: command stream ----------------------- */
+.row-command {
+  background-color: #272727;
+  border: 1px solid #939393;
+  border-radius: 4px;
+  padding: 0.75rem;
+  min-height: 280px;
+  max-height: 360px;
+  overflow: visible;        /* let dropdowns escape */
+  position: relative;
+}
+
+.command-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1.6fr;
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 0;
+}
+
+.cmd-col {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Output column needs its log to fill remaining height */
+.cmd-output {
+  height: 100%;
 }
 
 .io-log {
   background-color: #1b1b1b;
   color: #939393;
   padding: 10px;
-  height: 30vh;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
   border-radius: 7px;
   font-family: monospace;
   font-size: 0.8em;
+  margin: 0;
 }
 
 .io-stdin  { color: #ffffff; }
 .io-stdout { color: #939393; }
 .io-stderr { color: #8B0000; }
-
-.todo-panel {
-  text-align: center;
-  margin-top: 1rem;
-}
-
-.vnc-wrapper {
-  width: 100%;
-  height: 60vh;
-}
-
-.vnc-frame {
-  width: 100%;
-  height: 100%;
-  border: none;
-}
 
 .dropdown.is-fullwidth,
 .dropdown-menu.is-fullwidth {
@@ -739,16 +801,13 @@ onMounted(() => {
 }
 
 /* Ability-picker dropdown: the panel needs to be wide enough to show the
-   ability description (e.g. "Benign-human persona that mimics a developer
-   running git/build/test in a loop") without truncation, and it needs to
-   stack above neighbouring panel chrome. Bulma's default .dropdown-menu
-   inherits the trigger width via .is-fullwidth, which is too narrow when
-   the column is small. min-width + auto width lets it grow. */
+   ability description without truncation, and stack above neighbouring
+   chrome. min-width + auto width lets it grow past its column. */
 .dropdown.searchable .dropdown-menu {
   min-width: 360px;
   width: max-content;
   max-width: min(560px, 90vw);
-  z-index: 60; /* above adjacent .field controls and panel borders */
+  z-index: 60;
 }
 
 .dropdown.searchable .dropdown-content {
@@ -756,9 +815,6 @@ onMounted(() => {
   overflow-y: auto;
 }
 
-/* Allow each option's description to wrap onto a second line instead of
-   being single-line-truncated. The trigger (button) still shows just the
-   selected name, so this only affects the open menu. */
 .dropdown.searchable .dropdown-item {
   white-space: normal;
   line-height: 1.25;
@@ -775,12 +831,17 @@ onMounted(() => {
   border: 1px solid #272727;
   border-radius: 3px;
   padding: 0.5rem 0.75rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .step-list {
   list-style: none;
   margin: 0.25rem 0 0 0;
   padding: 0;
-  max-height: 240px;
+  flex: 1 1 auto;
   overflow-y: auto;
   font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
   font-size: 0.78em;
@@ -805,17 +866,18 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 
-/* Inline post-run MP4 player. Sized to fit the command-stream column
-   without forcing the panel to scroll on common laptop displays. */
+/* Inline post-run MP4 player. Compact since the live framebuffer is the
+   primary visual surface now. */
 .recording-panel {
   background: #1b1b1b;
   border: 1px solid #272727;
   border-radius: 3px;
   padding: 0.5rem 0.75rem;
+  margin-top: 0.5rem;
 }
 .recording-video {
   width: 100%;
-  max-height: 40vh;
+  max-height: 180px;
   background: black;
   border-radius: 3px;
 }
