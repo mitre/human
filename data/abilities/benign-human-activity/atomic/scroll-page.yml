@@ -1,0 +1,33 @@
+---
+
+- id: scroll-page
+  name: Scroll Page
+  description: |
+    Scroll the foreground window N wheel ticks. Direction defaults
+    to down. Same on every OS — wheel events are device-level.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_scroll_page
+    name: Benign User Activity - Scroll Page
+  plugin: human
+  tags: [interaction, browser]
+  args:
+    direction:
+      description: "up or down."
+      default: down
+    ticks:
+      description: Number of wheel notches.
+      default: 4
+  platforms:
+    windows:
+      steps:
+        - { action: scroll, wheel: "{{ args.direction }}", ticks: "{{ args.ticks }}" }
+        - { action: dwell, ms: 350 }
+    linux:
+      steps:
+        - { action: scroll, wheel: "{{ args.direction }}", ticks: "{{ args.ticks }}" }
+        - { action: dwell, ms: 350 }
+    darwin:
+      steps:
+        - { action: scroll, wheel: "{{ args.direction }}", ticks: "{{ args.ticks }}" }
+        - { action: dwell, ms: 350 }

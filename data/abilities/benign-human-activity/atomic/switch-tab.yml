@@ -1,0 +1,35 @@
+---
+
+- id: switch-tab
+  name: Switch Tab
+  description: |
+    Move tab focus forward (Ctrl+Tab) or backward (Ctrl+Shift+Tab).
+    Same chord on every desktop OS — Cmd+Option+Right/Left works on
+    macOS too but Ctrl+Tab is universally supported by all browsers.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_switch_tab
+    name: Benign User Activity - Switch Tab
+  plugin: human
+  tags: [interaction, browser]
+  args:
+    direction:
+      description: "forward (Ctrl+Tab) or backward (Ctrl+Shift+Tab)."
+      default: forward
+  platforms:
+    windows:
+      steps:
+        # Forward path: just Ctrl+Tab. Backward path uses Shift too.
+        # Simpler: profile picks two distinct abilities if it needs
+        # both. Here we hardcode forward; backward = swap to
+        # switch-tab-back if needed.
+        - { action: chord, keys: [LeftControl, Tab], hold_ms: 60 }
+        - { action: dwell, ms: 200 }
+    linux:
+      steps:
+        - { action: chord, keys: [LeftControl, Tab], hold_ms: 60 }
+        - { action: dwell, ms: 200 }
+    darwin:
+      steps:
+        - { action: chord, keys: [LeftControl, Tab], hold_ms: 60 }
+        - { action: dwell, ms: 200 }

@@ -1,0 +1,31 @@
+---
+
+- id: dwell-reading
+  name: Dwell (Reading)
+  description: |
+    Long pause (8-15 s default) — emulates a user actively reading the
+    page. Materializer picks a deterministic value in [min_ms, max_ms]
+    via the run-scoped splitmix64 RNG.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_dwell_reading
+    name: Benign User Activity - Dwell (Reading)
+  plugin: human
+  tags: [pacing]
+  args:
+    min_ms:
+      description: Lower bound of the dwell window in ms.
+      default: 8000
+    max_ms:
+      description: Upper bound of the dwell window in ms.
+      default: 15000
+  platforms:
+    windows:
+      steps:
+        - { action: dwell, ms_range: ["{{ args.min_ms }}", "{{ args.max_ms }}"] }
+    linux:
+      steps:
+        - { action: dwell, ms_range: ["{{ args.min_ms }}", "{{ args.max_ms }}"] }
+    darwin:
+      steps:
+        - { action: dwell, ms_range: ["{{ args.min_ms }}", "{{ args.max_ms }}"] }

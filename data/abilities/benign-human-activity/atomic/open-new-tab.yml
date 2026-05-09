@@ -1,0 +1,26 @@
+---
+
+- id: open-new-tab
+  name: Open New Tab
+  description: |
+    Open a new browser tab (Ctrl+T / Cmd+T). Leaves the new tab focused
+    on the New Tab page; pair with focus-address-bar-v2 to navigate.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_open_new_tab
+    name: Benign User Activity - Open New Tab
+  plugin: human
+  tags: [interaction, browser]
+  platforms:
+    windows:
+      steps:
+        - { action: chord, keys: [LeftControl, t], hold_ms: 50 }
+        - { action: dwell, ms: 250 }
+    linux:
+      steps:
+        - { action: chord, keys: [LeftControl, t], hold_ms: 50 }
+        - { action: dwell, ms: 250 }
+    darwin:
+      steps:
+        - { action: chord, keys: [LeftMeta, t], hold_ms: 50 }
+        - { action: dwell, ms: 250 }

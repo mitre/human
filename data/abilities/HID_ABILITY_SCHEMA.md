@@ -1,286 +1,281 @@
-# Human ability + profile model
+# HID Ability + Profile Schema
+
+This document describes the **platform-aware HID ability schema (v2)**
+used by the Human plugin's atomic-ability YAMLs and the profile YAMLs
+that compose them.
 
 ## Two-level model
 
-The Human plugin uses Caldera's standard adversary→ability hierarchy,
-sized for human emulation:
-
 ```
-Profile (= Caldera adversary YAML)         "Surf the Web"
-   ├── Atomic ability                          open-browser-firefox
-   ├── Atomic ability                          focus-address-bar
-   ├── Atomic ability (parametrized)           type-text(text="https://news.ycombinator.com")
-   ├── Atomic ability                          press-enter
-   ├── Atomic ability (parametrized)           dwell(ms=8000)
-   ├── Atomic ability                          scroll-down
-   ├── Atomic ability                          click-link-random
-   ├── Atomic ability (parametrized)           dwell(ms=12000)
+Profile (= adversary YAML)         "Surf the Web"
+   ├── ability                          open-default-browser
+   ├── ability                          dwell-natural
+   ├── ability                          focus-address-bar-v2
+   ├── ability (parametrized)           navigate-to-url(url=...)
+   ├── ability                          dwell-reading
+   ├── ability                          scroll-page(direction=down, ticks=5)
    └── …
 ```
 
-| Caldera term | Human term | File location | Examples |
-|---|---|---|---|
-| Adversary | **Profile** | `data/adversaries/` | `surf-the-web.yml`, `office-worker.yml`, `developer.yml` |
-| Ability | **Atomic action** | `data/abilities/benign-human-activity/atomic/` | `open-browser-firefox.yml`, `type-text.yml`, `press-enter.yml`, `dwell.yml` |
+| Caldera term | Human term | File location |
+|---|---|---|
+| Adversary | **Profile** | `data/adversaries/<name>.yml` |
+| Ability | **Atomic action** | `data/abilities/benign-human-activity/atomic/<name>.yml` |
 
-This is the same shape as red-team operations in stockpile: an
-adversary references atomic abilities; a profile references atomic
-human actions. Operators can mix: an adversary can include both red
-abilities AND human-profile abilities in the same operation, which is
-exactly the AE goal — emulate a real user doing benign work while a
-red-team adversary moves laterally.
+A profile is just an ordered list of atomic-ability invocations with
+optional per-call args. Profiles never contain raw HID — they always
+delegate to atomics. This keeps abilities reusable and lets red-team
+abilities intercut with human steps in the same operation.
 
-## Why atomic, not chunky
-
-The earlier 38 abilities were chunky: one ability did the whole "open
-email + read + click around" sequence. That's wrong because:
-
-1. **No reuse.** Every ability re-implemented "type a URL" inline.
-2. **Profiles can't compose.** A "browse-then-email" profile would
-   need a new chunky ability or copy-paste the URL-typing logic.
-3. **Caldera operations can't intercut.** If a red ability takes 30s
-   in the middle of a human's session, the chunky ability has to
-   yield — atomic abilities just take their natural turn in the
-   ordered queue.
-
-Atomic = one HID act, parametrized. Profile = ordered list of those.
-
-## Atomic ability YAML
+## Atomic ability YAML — platform-aware shape
 
 ```yaml
-- id: <uuid>
-  name: <short verb-phrase>
-  description: <one-line, what the user perceives>
+- id: <stable-kebab-case-id>
+  name: <Human Readable Name>
+  description: <one-line description>
   tactic: benign-human-activity
   technique:
     attack_id: x_human_<verb>
     name: Benign User Activity - <Verb>
-  hid:
-    estimated_duration_s: <int>      # for UI timeline
-    requires:
-      - tablet | mouse | keyboard | display
-    args:                            # optional — parametrize per-call
-      - name: text
-        type: string
-        default: ""
-      - name: per_char_ms
-        type: int
-        default: 80
-    steps:
-      # step uses {{ args.text }} etc. for substitution; daemon does
-      # the substitution at run time.
-      - action: type
-        text: "{{ args.text }}"
-        per_char_ms: { mean: "{{ args.per_char_ms }}", jitter: 30 }
+  plugin: human
+  tags: [interaction, browser, launch]
+
+  args:                                      # optional
+    <arg-name>:
+      description: <what it is>
+      default:                               # platform-specific defaults supported
+        windows: msedge
+        linux: firefox
+        darwin: Firefox
+      # Or a single value:
+      # default: "https://example.com"
+
+  platforms:
+    windows:
+      steps:
+        - { action: chord, keys: [LeftMeta, r], hold_ms: 50 }
+        - { action: dwell, ms: 400 }
+        - { action: type, text: "{{ args.browser_command }}" }
+        - { action: press, key: Enter }
+    linux:
+      steps:
+        - { action: press, key: LeftMeta }
+        - { action: type, text: "{{ args.browser_command }}" }
+        - { action: press, key: Enter }
+    darwin:
+      steps:
+        - { action: chord, keys: [LeftMeta, space], hold_ms: 50 }
+        - { action: type, text: "{{ args.browser_command }}" }
+        - { action: press, key: Enter }
 ```
 
-## Profile YAML (Caldera adversary)
+This mirrors stockpile's `platforms.{windows,linux,darwin}` pattern, but
+uses the HID action vocabulary rather than `cmd:` / `sh:`.
+
+### Action vocabulary
+
+Each step's `action` MUST be one of the OperatorMessage variants from
+`vhost-user-input/src/events.rs`:
+
+| action | required fields | semantics |
+|---|---|---|
+| `move` | `target`, `duration_ms` | smooth interpolated motion. `target.kind=abs` (tablet) / `rel` (mouse) / `named` (taskbar.firefox, random_link, address_bar) |
+| `click` | `button` | press+release |
+| `press` | `key` | press+release of a single key |
+| `keydown` / `keyup` | `key` | half of a press/release pair (chords) |
+| `type` | `text`, `per_char_ms` | one-by-one keystrokes with timing |
+| `dwell` | `ms` *or* `ms_range` *or* `{mean, jitter}` | sleep, no input |
+| `wait_for` | `ms` | longer semantic wait |
+| `scroll` | `wheel`, `ticks` | wheel events |
+| `chord` | `keys: [...]`, `hold_ms` | press-all, hold, release-all |
+| `raw` | `type_`, `code`, `value` | raw virtio-input event passthrough |
+| `repeat` | `count`, `steps: [...]` | sub-sequence run N times (expanded inline) |
+
+Tests in `tests/test_profile_materializer_v2.py` enforce that every step's
+action is in this set.
+
+### Args substitution
+
+The materializer uses **double-curly-brace placeholders** (Mustache-style,
+not full Jinja2). Two substitution forms:
+
+- **Whole-string placeholder** — preserves type:
+  `text: "{{ args.url }}"` becomes the literal arg value (str/int/list).
+- **Embedded placeholder** — string replacement:
+  `text: "Hello {{ args.name }}!"` turns into `"Hello alice!"`.
+
+Substitution is applied recursively over dicts and lists. Only the
+syntax `{{ args.<name> }}` is supported. No filters, no expressions, no
+conditionals — keep it dumb.
+
+### Platform fallback policy
+
+The materializer picks `platforms.<target_os>.steps` where `target_os`
+is read from:
+
+1. `--os` CLI flag, if given;
+2. otherwise `meta.json`'s `os` (or `platform`) key;
+3. otherwise the `HUMAN_TARGET_OS` env var.
+
+OS keys are normalized lowercase. Common synonyms map:
+`mac/macos/osx → darwin`, `win → windows`.
+
+If `platforms.<target_os>` is **absent** for an ability the profile
+references, the materializer raises:
+
+```
+KeyError: ability 'foo' is not implemented for OS 'darwin';
+available platforms: ['linux', 'windows']
+```
+
+Legacy abilities that pre-date the platforms shape (e.g. `dwell.yml`,
+`type-text.yml`, `open-browser-firefox.yml`) keep their `hid.steps` list
+and run the same on every OS. The materializer accepts both shapes.
+
+### Random dwells
+
+Dwell durations may be:
+
+- **Fixed**: `ms: 1500`
+- **Mean+jitter**: `ms: { mean: 800, jitter: 200 }` → uniform in
+  `[mean-jitter, mean+jitter]`
+- **Range**: `ms_range: [1500, 4000]` or `ms_range: { min: 1500, max: 4000 }`
+
+A profile-scoped splitmix64 RNG (seeded by `--seed`) picks one ms value
+per step. **Same seed + same profile = identical output** — guarantees
+reproducibility for tests and forensic replay.
+
+## Profile YAML
 
 ```yaml
 - id: <uuid>
   name: <persona or task label>
-  description: <what the human is trying to accomplish>
-  atomic_ordering:
+  description: <one-line>
+  duration_estimate_s: 90
+  steps:
     # Plain ability ID (no args needed)
-    - <ability_uuid>
-    # Ability with args
-    - {ability: <ability_uuid>, args: {text: "https://news.ycombinator.com"}}
-    - {ability: <dwell_uuid>, args: {ms: 8000}}
-    # … etc.
+    - { ability: open-default-browser }
+
+    # Ability with per-call arg overrides
+    - { ability: navigate-to-url, args: { url: "https://news.ycombinator.com" } }
+
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 5 } }
 ```
 
-The arg-bound entry is the same shape Caldera's stockpile uses for
-parametrized abilities. The Human plugin's `human_svc` materializes
-the ordering into a sequence of HID steps the human-actor daemon
-replays.
+The legacy key `atomic_ordering:` is still accepted for backward compat
+with old profiles that referenced abilities by UUID.
 
-## Action vocabulary (used inside atomic abilities)
+## OS-hotkey reference table
 
-| action | required fields | semantics |
-|---|---|---|
-| `move` | `target`, `duration_ms` | smooth interpolated motion. `target.kind=abs` for tablets, `kind=rel` for mouse, `target.named=…` for known coords |
-| `click` | `button` | press+release |
-| `press` | `key` | press+release |
-| `keydown` / `keyup` | `key` | half of the press/release pair (chords) |
-| `type` | `text`, `per_char_ms` | one-by-one keystrokes with timing |
-| `dwell` | `ms` | sleep, no input emission. `ms` may be int or `{mean, jitter}` |
-| `wait_for` | `ms` | sleep (longer); semantic hint |
-| `scroll` | `wheel`, `ticks` | wheel events |
-| `chord` | `keys: [...]`, `hold_ms` | press-all, hold, release-all |
-| `repeat` | `count`, `steps: [...]` | sub-sequence run N times |
+The new platform-aware abilities use these OS-native hotkeys:
 
-## Easing (for `move`)
+| Action | Windows | Linux (GNOME/KDE) | macOS |
+|---|---|---|---|
+| Open launcher | Win+R | Super | Cmd+Space |
+| Focus address bar | Ctrl+L | Ctrl+L | Cmd+L |
+| New tab | Ctrl+T | Ctrl+T | Cmd+T |
+| Close tab | Ctrl+W | Ctrl+W | Cmd+W |
+| Switch tab forward | Ctrl+Tab | Ctrl+Tab | Ctrl+Tab |
+| Switch tab back | Ctrl+Shift+Tab | Ctrl+Shift+Tab | Ctrl+Shift+Tab |
+| Find on page | Ctrl+F | Ctrl+F | Cmd+F |
+| Browser back | Alt+Left | Alt+Left | Cmd+Left |
+| Browser forward | Alt+Right | Alt+Right | Cmd+Right |
+| Reload | Ctrl+R / F5 | Ctrl+R / F5 | Cmd+R |
+| Lock screen | Win+L | Super+L | Ctrl+Cmd+Q |
+| Switch app | Alt+Tab | Alt+Tab | Cmd+Tab |
+| Copy / Cut / Paste | Ctrl+C/X/V | Ctrl+C/X/V | Cmd+C/X/V |
+| Select all | Ctrl+A | Ctrl+A | Cmd+A |
+| Undo / Redo | Ctrl+Z / Ctrl+Y | Ctrl+Z / Ctrl+Y | Cmd+Z / Cmd+Shift+Z |
 
-| name | shape | when to use |
-|---|---|---|
-| `linear` | constant velocity | least human |
-| `ease-out` | starts fast, slows | pointing at target |
-| `ease-in-out` | accelerate, peak, decelerate | longer drags |
-| `human` | Bezier-fit to real-mouse studies | most realistic |
+Every hotkey above is expressible with the existing key constants in
+`vhost-user-input/src/events.rs::pub mod key` — no new scancodes needed.
 
-## Coordinate system (for `move`)
+## Worked example: open-default-browser composed into surf-the-web
 
-`target.kind=abs` (tablet, recommended): x, y in [0, 32767].
-`target.kind=rel` (mouse): dx, dy as signed deltas.
-`target.named=...`: daemon resolves at run time:
-
-| named | resolved to |
-|---|---|
-| `taskbar.firefox` | (configured taskbar layout) |
-| `taskbar.chrome` | (configured taskbar layout) |
-| `address_bar` | foreground window's URL bar |
-| `random_link` | screen position of a random `<a>` in the foreground browser |
-| `app.<name>.window_close` | close button of a named app window |
-
-## Migration plan from the 38 chunky abilities
-
-1. Catalog the 38 — list which atomic actions each one was made of.
-2. Write the ~20 atomic ability YAMLs (one per primitive verb).
-3. Convert the 6 persona adversaries to reference atomic abilities.
-4. Mark the original 38 with `legacy: shell-cradle` and stop loading
-   them in the human-actor pipeline (they remain queryable for
-   backward-compatibility with any operator who pinned them by ID).
-5. Add a compatibility shim in `human_svc` so `surf-the-web`-style
-   profiles materialize correctly into HID step sequences.
-
-## Worked example: "Surf the Web"
-
-### Atomic abilities (each gets its own YAML)
-
-`open-browser-firefox`:
+`open-default-browser.yml` (excerpt):
 ```yaml
-- id: <uuid>
-  name: Open Browser (Firefox)
-  hid:
-    estimated_duration_s: 3
-    requires: [tablet, display]
-    steps:
-      - { action: move, target: { named: taskbar.firefox }, duration_ms: 450, easing: ease-out }
-      - { action: dwell, ms: { mean: 200, jitter: 80 } }
-      - { action: click, button: left }
-      - { action: wait_for, ms: 1500 }
+- id: open-default-browser
+  args:
+    browser_command:
+      default:
+        windows: msedge
+        linux: firefox
+        darwin: Firefox
+  platforms:
+    windows:
+      steps:
+        - { action: chord, keys: [LeftMeta, r], hold_ms: 50 }
+        - { action: dwell, ms: 400 }
+        - { action: type, text: "{{ args.browser_command }}", per_char_ms: 90 }
+        - { action: dwell, ms: 200 }
+        - { action: press, key: Enter }
+        - { action: wait_for, ms: 2500 }
 ```
 
-`focus-address-bar`:
+`surf-the-web.yml` (excerpt):
 ```yaml
-- id: <uuid>
-  name: Focus Address Bar
-  hid:
-    estimated_duration_s: 1
-    requires: [keyboard]
-    steps:
-      - { action: chord, keys: [LeftControl, l], hold_ms: 50 }
-```
-
-`type-text` (parametrized):
-```yaml
-- id: <uuid>
-  name: Type Text
-  hid:
-    estimated_duration_s: 4   # estimate; varies with text length
-    requires: [keyboard]
-    args:
-      - name: text
-        type: string
-        default: ""
-      - name: per_char_ms
-        type: int
-        default: 80
-    steps:
-      - { action: type, text: "{{ args.text }}",
-          per_char_ms: { mean: "{{ args.per_char_ms }}", jitter: 30 } }
-```
-
-`press-enter`:
-```yaml
-- id: <uuid>
-  name: Press Enter
-  hid:
-    estimated_duration_s: 0
-    requires: [keyboard]
-    steps:
-      - { action: press, key: Enter }
-```
-
-`dwell` (parametrized):
-```yaml
-- id: <uuid>
-  name: Dwell (read / pause)
-  hid:
-    estimated_duration_s: 8     # placeholder; real value comes from args
-    requires: []
-    args:
-      - { name: ms, type: int, default: 5000 }
-    steps:
-      - { action: dwell, ms: "{{ args.ms }}" }
-```
-
-`scroll-down`:
-```yaml
-- id: <uuid>
-  name: Scroll Down
-  hid:
-    estimated_duration_s: 1
-    requires: [tablet]
-    args:
-      - { name: ticks, type: int, default: 4 }
-    steps:
-      - { action: scroll, wheel: down, ticks: "{{ args.ticks }}" }
-```
-
-`click-link-random`:
-```yaml
-- id: <uuid>
-  name: Click Random Link
-  hid:
-    estimated_duration_s: 1
-    requires: [tablet, display]
-    steps:
-      - { action: move, target: { named: random_link }, duration_ms: 350 }
-      - { action: click, button: left }
-```
-
-### Profile (adversary YAML)
-
-`surf-the-web.yml`:
-```yaml
-- id: <uuid>
+- id: c8cb2ea6-1b8f-40eb-8b9b-b225f0368497
   name: Surf the Web
-  description: |
-    Operator opens Firefox, navigates to a news aggregator, idles to
-    "read", scrolls, clicks a random link, idles, scrolls more, alt-back,
-    repeats 2 more times.
-  atomic_ordering:
-    - <open-browser-firefox>
-    - <focus-address-bar>
-    - {ability: <type-text>, args: {text: "https://news.ycombinator.com"}}
-    - <press-enter>
-    - {ability: <dwell>, args: {ms: 8000}}
-    - {ability: <scroll-down>, args: {ticks: 5}}
-    - <click-link-random>
-    - {ability: <dwell>, args: {ms: 12000}}
-    - {ability: <scroll-down>, args: {ticks: 3}}
-    - {ability: <chord-alt-left>, args: {}}     # back to news listing
-    - {ability: <dwell>, args: {ms: 3000}}
-    - {ability: <scroll-down>, args: {ticks: 4}}
-    - <click-link-random>
-    - {ability: <dwell>, args: {ms: 10000}}
+  steps:
+    - { ability: open-default-browser }
+    - { ability: dwell-natural }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://news.ycombinator.com" } }
+    - { ability: dwell-reading }
+    ...
 ```
 
-The same atomic abilities compose into other profiles (Office Worker,
-Developer, Sales Rep) by changing the ordering and the arg values.
+Materialized for `os=windows`:
+```json
+{"action": "chord", "keys": ["LeftMeta", "r"], "hold_ms": 50}
+{"action": "dwell", "ms": 400}
+{"action": "type", "text": "msedge", "per_char_ms": 90}
+{"action": "dwell", "ms": 200}
+{"action": "press", "key": "Enter"}
+{"action": "wait_for", "ms": 2500}
+{"action": "dwell", "ms": 2326}            // dwell-natural, RNG-picked
+{"action": "chord", "keys": ["LeftControl", "l"], "hold_ms": 50}
+{"action": "dwell", "ms": 150}
+{"action": "type", "text": "https://news.ycombinator.com", "per_char_ms": 110}
+...
+```
 
-## Where Vue renders this
+Materialized for `os=linux`:
+```json
+{"action": "press", "key": "LeftMeta"}      // Super, not chord
+{"action": "dwell", "ms": 500}
+{"action": "type", "text": "firefox", "per_char_ms": 90}
+...
+```
 
-`gui/views/human.vue`:
+The same profile YAML produces OS-correct streams for all three desktop
+platforms by virtue of each atomic ability's per-platform branch.
 
-- **Profile selector** (per host): operator picks "Surf the Web",
-  "Office Worker", etc. — these come from `data/adversaries/` filtered
-  to `tactic includes benign-human-activity` or by tag.
-- **Step preview panel**: when a profile is selected, the panel
-  expands the profile's atomic ordering into a flat list of steps.
-  Per-ability args are rendered inline (e.g. `type-text("https://...")`).
-- **Live viewer**: VNC iframe of the selected host's framebuffer.
-- **Now-running indicator**: highlights the currently-executing
-  step in the preview list (driven by an SSE from the human-actor
-  daemon).
+## Composing in your own profile
+
+1. Start a new file under `data/adversaries/<persona>.yml`.
+2. List the ability IDs you want, in order, under `steps:`.
+3. Override defaults inline with `{ability: X, args: {...}}`.
+4. Materialize:
+
+```bash
+python3 -m pyhuman.profile_materializer \
+    --profile data/adversaries/my-profile.yml \
+    --abilities data/abilities/benign-human-activity/atomic/ \
+    --os windows --seed 42
+```
+
+5. Pipe to a microvm's operator socket:
+
+```bash
+... | socat - UNIX-CONNECT:/var/run/microvms/<vm>/op.sock
+```
+
+## Migration from v1
+
+The 8 original abilities (`open-browser-firefox`, `focus-address-bar`,
+`type-text`, `press-enter`, `dwell`, `scroll-down`, `click-link-random`,
+`chord-alt-left`) used `hid.steps:` directly with no platform awareness.
+They are still loaded for backward compat but new profiles should
+reference the v2 platform-aware abilities instead.

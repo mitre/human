@@ -1,0 +1,31 @@
+---
+
+- id: dwell-natural
+  name: Dwell (Natural Pause)
+  description: |
+    Short transition pause (1.5-4 s) — the kind of micro-pause humans
+    leave between discrete UI actions. Materializer picks a
+    deterministic value in [min_ms, max_ms] via the run-scoped RNG.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_dwell_natural
+    name: Benign User Activity - Dwell (Natural)
+  plugin: human
+  tags: [pacing]
+  args:
+    min_ms:
+      description: Lower bound of the dwell window in ms.
+      default: 1500
+    max_ms:
+      description: Upper bound of the dwell window in ms.
+      default: 4000
+  platforms:
+    windows:
+      steps:
+        - { action: dwell, ms_range: ["{{ args.min_ms }}", "{{ args.max_ms }}"] }
+    linux:
+      steps:
+        - { action: dwell, ms_range: ["{{ args.min_ms }}", "{{ args.max_ms }}"] }
+    darwin:
+      steps:
+        - { action: dwell, ms_range: ["{{ args.min_ms }}", "{{ args.max_ms }}"] }

@@ -1,0 +1,36 @@
+---
+
+- id: navigate-to-url
+  name: Navigate to URL
+  description: |
+    Assumes the address bar is already focused. Types the URL and
+    presses Enter. Pair with focus-address-bar-v2 immediately before.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_navigate_url
+    name: Benign User Activity - Navigate to URL
+  plugin: human
+  tags: [interaction, browser, navigation]
+  args:
+    url:
+      description: The URL to type into the focused address bar.
+      default: "https://example.com"
+  platforms:
+    windows:
+      steps:
+        - { action: type, text: "{{ args.url }}", per_char_ms: 110 }
+        - { action: dwell, ms: 250 }
+        - { action: press, key: Enter }
+        - { action: wait_for, ms: 1500 }
+    linux:
+      steps:
+        - { action: type, text: "{{ args.url }}", per_char_ms: 110 }
+        - { action: dwell, ms: 250 }
+        - { action: press, key: Enter }
+        - { action: wait_for, ms: 1500 }
+    darwin:
+      steps:
+        - { action: type, text: "{{ args.url }}", per_char_ms: 110 }
+        - { action: dwell, ms: 250 }
+        - { action: press, key: Enter }
+        - { action: wait_for, ms: 1500 }
