@@ -9,9 +9,15 @@
 
     Mirrors plugins/range/gui/components/WorkstationViewer.vue but renders
     inline (no modal), sized to fill the available area in its container,
-    constrained to a 4:3 aspect ratio capped at 1024x768 for native
-    framebuffer parity. View-only — input flows from the Human plugin's
-    profile runner via the operator UDS, not the operator's keyboard/mouse.
+    constrained to a 16:9 aspect ratio (monitor-shaped) targeting 1280x720
+    native. View-only — input flows from the Human plugin's profile
+    runner via the operator UDS, not the operator's keyboard/mouse.
+
+    NOTE: the gpu daemon's framebuffer is currently 1024x768 (4:3). The
+    16:9 frame here will letterbox the 4:3 framebuffer with black bars
+    on the sides. A follow-up should change the daemon's --geometry to
+    1280x720 for an exact match (also touches the post-spawn driver
+    install + a Range catalog tweak).
 
     A 404 from the WS proxy (host has no GUI session — host-stub-1 etc)
     is surfaced as a "stub mode" placeholder rather than an endless retry
@@ -63,9 +69,9 @@
       </div>
     </div>
 
-    <!-- 4:3 aspect-ratio viewport. The canvas auto-fills via :deep(canvas).
-         v-show (not v-if) so the noVNC RFB instance & WebSocket stay alive
-         when the section is collapsed. -->
+    <!-- 16:9 aspect-ratio viewport (monitor-shaped). The canvas auto-fills
+         via :deep(canvas). v-show (not v-if) so the noVNC RFB instance &
+         WebSocket stay alive when the section is collapsed. -->
     <div class="viewport-frame" v-show="!collapsed">
       <div class="viewport-aspect">
         <!-- No host selected: pure CSS placeholder; component does NOT
@@ -392,9 +398,9 @@ defineExpose({ vncWsUrl, MAX_RETRIES, RETRY_DELAY_MS })
 }
 
 /* The frame fills its parent. The aspect-ratio child fills as much of the
-   parent as possible while keeping 4:3, picking whichever of width or
-   height is the constraining dimension. No hard 1024-px cap so tall
-   browser windows produce taller (more monitor-shaped) canvases. */
+   parent as possible while keeping 16:9 (monitor-shaped), picking
+   whichever of width or height is the constraining dimension. No hard
+   pixel cap so wider browser windows produce wider canvases. */
 .viewport-frame {
   flex: 1 1 auto;
   min-height: 0;
@@ -410,15 +416,15 @@ defineExpose({ vncWsUrl, MAX_RETRIES, RETRY_DELAY_MS })
 
 .viewport-aspect {
   position: relative;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 9;
   /* Use ALL the vertical space first (height: 100%), then derive width
-     from the 4:3 aspect ratio. max-width: 100% caps us at the parent's
+     from the 16:9 aspect ratio. max-width: 100% caps us at the parent's
      width when the row is narrower-than-tall (then aspect-ratio derives
      height from width instead). margin: 0 auto centers horizontally
-     when the parent is wider than the resulting canvas. This replaces
-     the previous `max-width: min(100%, 1024px); max-height: min(100%,
-     768px)` rule, which capped the frame at 1024x768 and wasted any
-     vertical real estate beyond 768px. */
+     when the parent is wider than the resulting canvas. The parent row
+     in human.vue is given a min-height of 50vh so the height: 100% here
+     resolves to a real pixel value and we get a properly monitor-shaped
+     frame instead of being clamped by an auto-height grandparent. */
   height: 100%;
   width: auto;
   max-width: 100%;

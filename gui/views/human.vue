@@ -21,12 +21,17 @@
     </section>
 
     <!-- LAYOUT GRID =======================================================
-         Row 1 (auto): hosts panel + selected-host detail (side-by-side
-                       narrow strip, ~150-220px tall).
-         Row 2 (1fr) : live endpoint viewer (LiveEndpointViewer.vue) — fills
-                       remaining vertical space, capped to 1024x768.
-         Row 3 (auto): command stream (ability picker / args / record /
-                       output) split into sub-columns.
+         Row 1 (auto)              : hosts panel + selected-host detail
+                                     (side-by-side narrow strip, ~200px tall).
+         Row 2 (minmax(50vh, 1fr)) : live endpoint viewer
+                                     (LiveEndpointViewer.vue) — at least
+                                     half the viewport height, then grows
+                                     into any remaining vertical space.
+                                     The 16:9 (monitor-shaped) frame fits
+                                     inside this row, centered.
+         Row 3 (auto)              : command stream (ability picker /
+                                     args / record / output) split into
+                                     sub-columns.
 
          The viewer is the dominant visual surface; the command stream
          stays ergonomic but secondary. -->
@@ -668,23 +673,29 @@ onMounted(() => {
 }
 
 /* Vertical 3-row layout:
-     auto  hosts row  (fixed-height strip, ~200px)
-     1fr   viewer row (fills remaining vertical space)
-     auto  command stream (sub-grid of 3 columns)
-   The 1fr row lets the LiveEndpointViewer dominate the visible area —
-   that's the whole point of this restructure. When the viewer is
-   collapsed, .row-viewer carries the .is-collapsed class so the row
-   tracks shrink to header-height instead of consuming 1fr. */
+     auto       hosts row  (fixed-height strip, ~200px)
+     minmax(50vh, 1fr)
+                viewer row (at least half the viewport height — guaranteed
+                real estate so the 16:9 frame isn't crushed when its
+                height: 100% would otherwise resolve through a chain of
+                auto-height ancestors)
+     auto       command stream (sub-grid of 3 columns)
+   The viewer row dominates the visible area — that's the whole point
+   of this restructure. When the viewer is collapsed, .row-viewer
+   carries the .is-collapsed class and the grid template flips so the
+   viewer track shrinks to header-height and the command stream gets
+   the freed space (see .human-grid.viewer-collapsed below). */
 .human-grid {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(50vh, 1fr) auto;
   gap: 0.75rem;
   flex: 1 1 auto;
   min-height: 0;
 }
 
-/* Collapsed-viewer mode: shrink the viewer's grid track and let the
-   command stream use the freed vertical space. */
+/* Collapsed-viewer mode: shrink the viewer's grid track (override the
+   50vh minmax from the default template) and let the command stream
+   use the freed vertical space. */
 .human-grid.viewer-collapsed {
   grid-template-rows: auto auto minmax(0, 1fr);
 }
@@ -761,7 +772,7 @@ onMounted(() => {
 }
 
 /* The LiveEndpointViewer fills .row-viewer; its CSS internally caps the
-   canvas to 4:3 / 1024x768 and centers it. */
+   canvas to 16:9 (monitor-shaped) and centers it. */
 .row-viewer > :deep(.live-endpoint) {
   height: 100%;
   min-height: 0;
