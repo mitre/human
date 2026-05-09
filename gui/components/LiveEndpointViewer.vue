@@ -386,6 +386,20 @@ defineExpose({ vncWsUrl, MAX_RETRIES, RETRY_DELAY_MS })
   padding-right: 0.5rem;
 }
 
+/* Force the chevron glyph white on the dark button background. Bulma's
+   .button.is-dark sets color:#fff on the button, but Vue's scoped-style
+   isolation + Caldera's global CSS load order can cause the inherited
+   color to lose to a more-specific rule on `i.fas` elsewhere, leaving
+   the icon rendered in the same dark grey as the button background
+   (operator sees an apparently-blank/black square). Setting an explicit
+   color here matches the convention used elsewhere in Caldera Vue
+   (e.g. ShowDeployedInstances.vue's `style="color: white"` on its
+   collapse icon). */
+.collapse-toggle .icon,
+.collapse-toggle .icon i {
+  color: var(--caldera-fg, #fff);
+}
+
 /* When collapsed, drop bottom-margin from the header so the section
    shrinks to a single bar and the page redistributes the freed space. */
 .live-endpoint.is-collapsed .endpoint-header {
