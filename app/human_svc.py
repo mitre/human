@@ -89,19 +89,33 @@ class HumanService(BaseService):
     async def list_live_workflows(self):
         """Return workflows that the control_server can execute.
 
-        TODO: forward to control_server.py's `_list` JSON-RPC method.
-        For now we return a small hardcoded set plus everything we have
-        loaded from the legacy pyhuman workflow modules so the picker is
-        not empty.
+        Mixes three sources:
+          1. HID profile adversaries under data/adversaries/*.yml — these
+             carry a `profile_id` so the frontend dispatches them through
+             /plugin/human/api/run-profile (the input-daemon SSE pipe).
+          2. Legacy stub shell workflows (idle_browse / office_open /
+             shell_noop) — kept for the pre-HID demo path.
+          3. Anything Caldera's data_svc has loaded as a `workflows`
+             collection from the legacy pyhuman modules.
+        Profiles surface first because they're the new canonical path.
         """
-        live = [
+        live = []
+
+        # 1) HID profiles: every YAML in data/adversaries/ becomes an
+        # ability the operator can pick. The materializer is the source
+        # of truth for the step list, but we expose the raw `hid` block
+        # too so human.vue's step preview can render without round-tripping.
+        live.extend(self._discover_profiles())
+
+        # 2) Legacy stub shell workflows.
+        live.extend([
             {'id': 'idle_browse', 'name': 'Idle Browse',
              'description': 'Open a few benign URLs in a real browser.'},
             {'id': 'office_open', 'name': 'Office Open',
              'description': 'Open and edit a document for N seconds.'},
             {'id': 'shell_noop',  'name': 'Shell No-op',
              'description': 'Run a benign shell command (echo / sleep).'},
-        ]
+        ])
         try:
             legacy = await self.data_svc.locate('workflows')
             for w in legacy:
@@ -118,6 +132,44 @@ class HumanService(BaseService):
         except Exception:
             pass
         return {'workflows': live}
+
+    def _discover_profiles(self):
+        """Walk data/adversaries/*.yml and return picker-shaped dicts.
+
+        The dict carries `profile_id` so the frontend knows to take the
+        SSE/run-profile path; legacy entries lack that key and fall
+        through to the cradle-builder run path.
+        """
+        import yaml
+        out = []
+        adv_dir = os.path.join(self.human_dir, 'data', 'adversaries')
+        if not os.path.isdir(adv_dir):
+            return out
+        for name in sorted(os.listdir(adv_dir)):
+            if not name.endswith('.yml'):
+                continue
+            path = os.path.join(adv_dir, name)
+            try:
+                with open(path) as f:
+                    entries = yaml.safe_load(f) or []
+            except Exception:
+                continue
+            # Legacy adversary YAMLs are top-level dicts; HID profiles
+            # are top-level lists. Coerce to a list so both render.
+            if isinstance(entries, dict):
+                entries = [entries]
+            if not entries:
+                continue
+            entry = entries[0]
+            pid = entry.get('id') or os.path.splitext(name)[0]
+            out.append({
+                'id': pid,                       # used by the picker key
+                'profile_id': pid,               # marks it as run-profile path
+                'name': entry.get('name') or os.path.splitext(name)[0],
+                'description': (entry.get('description') or '').strip(),
+                'hid': entry.get('hid') or {},   # may be empty for profiles
+            })
+        return out
 
     async def dispatch_run(self, body):
         """Dispatch a workflow/ad-hoc to a host.

@@ -416,6 +416,16 @@ async function runAssignedWorkflow() {
   if (!a.workflow_id) return
   a.args = argsInput.value
   a.status = 'running'
+
+  // HID profiles carry a `profile_id` (set by human_svc._discover_profiles).
+  // Those go through the SSE pipe so the operator socket receives one
+  // OperatorMessage per step, with the UI's step-counter following along.
+  // Legacy shell-cradle abilities (no profile_id) keep using /api/run.
+  const wf = workflows.value.find(w => w.id === a.workflow_id)
+  if (wf && wf.profile_id) {
+    return runProfileSse(selectedHostId.value, wf.profile_id, a)
+  }
+
   appendLog(selectedHostId.value, 'stdin', `[human-ability] ${a.workflow_id} ${a.args}`)
   try {
     const res = await $api.post('/plugin/human/api/run', {
@@ -428,6 +438,67 @@ async function runAssignedWorkflow() {
   } catch (err) {
     a.status = 'error'
     appendLog(selectedHostId.value, 'stderr', `run failed: ${err.message || err}`)
+  }
+}
+
+// SSE-based dispatch for HID profiles (Phase C2). EventSource is GET-
+// only, which is why the backend route accepts both POST and GET. We
+// take the GET path here because EventSource is the simplest reliable
+// SSE consumer in browsers; the streaming endpoint mirrors the messages
+// one-for-one into the operator UDS server-side.
+function runProfileSse(host_id, profile_id, assignment) {
+  const url = `/plugin/human/api/run-profile`
+    + `?host_id=${encodeURIComponent(host_id)}`
+    + `&profile_id=${encodeURIComponent(profile_id)}`
+  appendLog(host_id, 'stdin',
+            `[profile] ${profile_id} -> input-daemon (host=${host_id})`)
+  currentStepIdx.value = null
+
+  let es
+  try {
+    es = new EventSource(url)
+  } catch (err) {
+    assignment.status = 'error'
+    appendLog(host_id, 'stderr', `EventSource open failed: ${err.message || err}`)
+    return
+  }
+  es.onmessage = (ev) => {
+    let payload
+    try { payload = JSON.parse(ev.data) } catch (_) { payload = { raw: ev.data } }
+
+    if (payload && payload.event === 'done') {
+      appendLog(host_id, 'stdin', `[profile] done (${payload.count} messages)`)
+      assignment.status = 'success'
+      currentStepIdx.value = null
+      es.close()
+      return
+    }
+    if (payload && payload.event === 'error') {
+      appendLog(host_id, 'stderr', `[profile] ${payload.error}`)
+      assignment.status = 'error'
+      es.close()
+      return
+    }
+    // Normal OperatorMessage. Show as stdin (it's input we are pushing
+    // into the guest) and bump currentStepIdx so the step-preview header
+    // highlights live.
+    if (typeof payload._idx === 'number') {
+      currentStepIdx.value = payload._idx
+    }
+    const action = payload.action || '(?)'
+    appendLog(host_id, 'stdin',
+              `${(payload._idx ?? 0) + 1}. ${action}  ${stepDetail(payload)}`)
+  }
+  es.onerror = () => {
+    // EventSource fires onerror both for transient reconnects and for
+    // hard failures; in our case the server closes the stream after
+    // `done`, which the browser surfaces as an error. If we already
+    // saw the done event we've nulled currentStepIdx and set status.
+    if (assignment.status === 'running') {
+      assignment.status = 'error'
+      appendLog(host_id, 'stderr', `[profile] stream closed unexpectedly`)
+    }
+    es.close()
   }
 }
 

@@ -37,4 +37,10 @@ async def enable(services):
     app.router.add_route('GET',  '/plugin/human/api/workflows', human_api.api_workflows)
     app.router.add_route('POST', '/plugin/human/api/run',       human_api.api_run)
 
+    # Phase C: profile -> input-daemon dispatch. SSE-streamed; supports
+    # both POST (JSON body) and GET (query string, friendly to the
+    # browser's EventSource API which is GET-only).
+    app.router.add_route('POST', '/plugin/human/api/run-profile', human_api.api_run_profile)
+    app.router.add_route('GET',  '/plugin/human/api/run-profile', human_api.api_run_profile)
+
     app.router.add_static('/human', 'plugins/human/static', append_version=True)
