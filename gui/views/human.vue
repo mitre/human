@@ -164,6 +164,28 @@
                 </button>
               </div>
             </div>
+            <!-- Record-this-run toggle. Wires through to api_run_profile?record=true,
+                 which spawns an RfbRecorder against the GPU daemon's framebuffer for
+                 the duration of the profile run. The MP4 lands inline in the panel
+                 below (and as a download link) once the run finishes. -->
+            <label class="checkbox is-size-7 mt-2">
+              <input type="checkbox" v-model="record" />
+              Record this run (MP4 video of the framebuffer)
+            </label>
+          </div>
+
+          <!-- Recording playback. Rendered inline once the SSE
+               stream emits ``recording_ready``; before that this
+               block is hidden. -->
+          <div v-if="recordingUrl" class="recording-panel mt-3">
+            <h4 class="title is-6 mb-1">Recording</h4>
+            <video controls :src="recordingUrl" class="recording-video"></video>
+            <p class="is-size-7 mt-1">
+              <a :href="recordingUrl" download>Download MP4</a>
+              <span class="has-text-grey ml-2" v-if="recordingPath">
+                ({{ recordingPath }})
+              </span>
+            </p>
           </div>
 
           <!-- Free-form ad-hoc command -->
@@ -255,6 +277,14 @@ const adhocInput = ref('')
 const hostFilter = ref('')
 const loading = ref(false)
 const rangeProfileName = ref('')       // populated from /hosts response if available
+
+// Record-this-run toggle: wired into runProfileSse so the SSE handler
+// can spawn an RfbRecorder against the GPU daemon. Set per-host via
+// the checkbox next to the Run button.
+const record = ref(false)
+// Filled in by the SSE `recording_ready` event after a recorded run.
+const recordingUrl = ref(null)
+const recordingPath = ref(null)
 
 const MAX_LOG_LINES = 200
 
@@ -450,9 +480,15 @@ function runProfileSse(host_id, profile_id, assignment) {
   const url = `/plugin/human/api/run-profile`
     + `?host_id=${encodeURIComponent(host_id)}`
     + `&profile_id=${encodeURIComponent(profile_id)}`
+    + `&record=${record.value ? 'true' : 'false'}`
   appendLog(host_id, 'stdin',
-            `[profile] ${profile_id} -> input-daemon (host=${host_id})`)
+            `[profile] ${profile_id} -> input-daemon (host=${host_id}, `
+            + `record=${record.value})`)
   currentStepIdx.value = null
+  // Reset any previous run's playback state so the panel doesn't show
+  // stale video from a prior host/profile until the new one finalizes.
+  recordingUrl.value = null
+  recordingPath.value = null
 
   let es
   try {
@@ -470,7 +506,12 @@ function runProfileSse(host_id, profile_id, assignment) {
       appendLog(host_id, 'stdin', `[profile] done (${payload.count} messages)`)
       assignment.status = 'success'
       currentStepIdx.value = null
-      es.close()
+      // Don't close yet — the recorder finalize emits `recording_ready`
+      // after `done`, on the `log` event channel. We close on the
+      // recording_ready handler (or onerror, whichever comes first).
+      if (!record.value) {
+        es.close()
+      }
       return
     }
     if (payload && payload.event === 'error') {
@@ -489,11 +530,33 @@ function runProfileSse(host_id, profile_id, assignment) {
     appendLog(host_id, 'stdin',
               `${(payload._idx ?? 0) + 1}. ${action}  ${stepDetail(payload)}`)
   }
+  // The SSE handler emits `event: log` lines for recording lifecycle
+  // events (recording_started / finalizing_recording / recording_ready
+  // / recording_error). `onmessage` only sees default-event lines, so
+  // we need an explicit listener for the `log` channel.
+  es.addEventListener('log', (ev) => {
+    let payload
+    try { payload = JSON.parse(ev.data) } catch (_) { return }
+    if (!payload || !payload.event) return
+    if (payload.event === 'recording_started') {
+      appendLog(host_id, 'stdout', `[recording] started -> ${payload.path}`)
+    } else if (payload.event === 'finalizing_recording') {
+      appendLog(host_id, 'stdout', `[recording] finalizing...`)
+    } else if (payload.event === 'recording_ready') {
+      recordingUrl.value = payload.url
+      recordingPath.value = payload.path
+      appendLog(host_id, 'stdout', `[recording] ready -> ${payload.url}`)
+      es.close()
+    } else if (payload.event === 'recording_error') {
+      appendLog(host_id, 'stderr', `[recording] ${payload.error}`)
+    }
+  })
   es.onerror = () => {
     // EventSource fires onerror both for transient reconnects and for
     // hard failures; in our case the server closes the stream after
-    // `done`, which the browser surfaces as an error. If we already
-    // saw the done event we've nulled currentStepIdx and set status.
+    // `done` (or after `recording_ready` for recorded runs), which the
+    // browser surfaces as an error. If we already saw the done event
+    // we've nulled currentStepIdx and set status.
     if (assignment.status === 'running') {
       assignment.status = 'error'
       appendLog(host_id, 'stderr', `[profile] stream closed unexpectedly`)
@@ -687,5 +750,20 @@ onMounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Inline post-run MP4 player. Sized to fit the command-stream column
+   without forcing the panel to scroll on common laptop displays. */
+.recording-panel {
+  background: #1b1b1b;
+  border: 1px solid #272727;
+  border-radius: 3px;
+  padding: 0.5rem 0.75rem;
+}
+.recording-video {
+  width: 100%;
+  max-height: 40vh;
+  background: black;
+  border-radius: 3px;
 }
 </style>

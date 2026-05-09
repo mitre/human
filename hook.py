@@ -43,4 +43,10 @@ async def enable(services):
     app.router.add_route('POST', '/plugin/human/api/run-profile', human_api.api_run_profile)
     app.router.add_route('GET',  '/plugin/human/api/run-profile', human_api.api_run_profile)
 
+    # MP4 playback for runs the operator opted to record. Filename and
+    # vm_name are validated inside the handler; we never trust the URL.
+    app.router.add_route(
+        'GET', '/plugin/human/api/recording/{vm_name}/{filename}',
+        human_api.api_recording)
+
     app.router.add_static('/human', 'plugins/human/static', append_version=True)

@@ -2,13 +2,57 @@ import asyncio
 import glob
 import json
 import os
+import re
 import socket
 import traceback
+from datetime import datetime
 from pathlib import Path
 
 from aiohttp_jinja2 import template, web
 
 from app.service.auth_svc import for_all_public_methods, check_authorization
+
+# Cloud carrier support: when meta.json declares `transport.kind ==
+# "ssh-tunnel"` we open an `ssh -L` to forward the remote operator UDS
+# back to a local path. SSHTunnelManager is shared across cloud
+# providers (AWS bare-metal + Azure nested). One instance per Human
+# plugin process is fine.
+try:
+    from plugins.human.app.ssh_tunnel import SSHTunnelManager
+    _SSH_TUNNEL_MGR = SSHTunnelManager()
+except Exception:  # noqa: BLE001 — module-load defensive
+    _SSH_TUNNEL_MGR = None
+
+# Where the SSE handler writes recorded MP4s. One subdir per VM keeps
+# operator-side cleanup straightforward (and matches the convention
+# used elsewhere in the runtime tree).
+RECORDINGS_BASE = os.environ.get(
+    'TIMESTONE_RECORDINGS_BASE', '/var/lib/timestone/recordings'
+)
+
+# Filenames the MP4-serving endpoint will accept. Defensive: enforce
+# .mp4 suffix and reject anything containing a path separator or '..'
+# component before we touch the filesystem.
+_SAFE_MP4_FILENAME_RE = re.compile(r'^[A-Za-z0-9._-]+\.mp4$')
+
+
+def _parse_bool(value) -> bool:
+    """Coerce query-string / JSON ``record`` field to bool.
+
+    Browsers stringify ``record=true`` from the EventSource URL, so we
+    need to treat ``"true"`` / ``"1"`` / ``"yes"`` as truthy. Anything
+    else (including missing / None / empty string) is False so the
+    feature is opt-in.
+    """
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in ('1', 'true', 'yes', 'on')
+    return False
 
 # Canonical microVM runtime base. Mirrors the Range provider constant
 # (plugins/range/app/cdktf/providers/onprem_microvm_provider.py:83
@@ -111,12 +155,19 @@ class HumanApi:
         OperatorMessage and a final ``data: {"event":"done","count":N}``.
         Errors before the stream starts return JSON 4xx/5xx; errors mid-
         stream emit ``data: {"event":"error","error":"..."}`` and close.
+
+        If the caller passes ``record=true`` (query string or body
+        field), an :class:`RfbRecorder` is spawned for the duration of
+        the profile run; on completion the SSE stream emits a
+        ``recording_started`` event up front and a ``recording_ready``
+        event with the playback URL once the MP4 is finalized.
         """
         # Accept GET (query string, easy for EventSource) or POST (body).
         if request.method == 'GET':
             host_id = request.query.get('host_id')
             profile_id = request.query.get('profile_id')
             args_raw = request.query.get('args')
+            record = _parse_bool(request.query.get('record'))
             try:
                 call_args = json.loads(args_raw) if args_raw else {}
             except Exception:
@@ -133,6 +184,7 @@ class HumanApi:
             host_id = body.get('host_id')
             profile_id = body.get('profile_id')
             call_args = body.get('args') or {}
+            record = _parse_bool(body.get('record'))
 
         if not host_id or not profile_id:
             return web.json_response(
@@ -196,6 +248,51 @@ class HumanApi:
         )
         await resp.prepare(request)
 
+        # --- optional framebuffer recording ---------------------------
+        # When `record=true` we resolve the GPU daemon's RFB endpoint
+        # (local TCP for on-prem, ssh-tunnelled local TCP for cloud
+        # carriers), spawn a recorder for the duration of the profile
+        # run, and emit `recording_started` / `recording_ready` SSE
+        # events the UI can splice into its inline player.
+        recorder = None
+        recorder_mp4_path = None
+        recorder_url = None
+        if record:
+            try:
+                vnc_host, vnc_port = self._resolve_vnc_endpoint(host_id)
+                recordings_dir = Path(RECORDINGS_BASE) / host_id
+                recordings_dir.mkdir(parents=True, exist_ok=True)
+                ts = datetime.now().strftime('%Y%m%d-%H%M%S')
+                recorder_mp4_path = recordings_dir / f'{ts}-{profile_id}.mp4'
+                recorder_url = (
+                    f'/plugin/human/api/recording/{host_id}/'
+                    f'{recorder_mp4_path.name}'
+                )
+                # Lazy import: lets the rest of the plugin still load
+                # cleanly if the recorder module is missing on a host
+                # that won't need recording.
+                from plugins.human.pyhuman.recorder import RfbRecorder
+                recorder = RfbRecorder(
+                    host=vnc_host, port=vnc_port,
+                    output_mp4=recorder_mp4_path, fps=10,
+                )
+                recorder.start()
+                await resp.write(
+                    ('event: log\ndata: ' + json.dumps({
+                        'event': 'recording_started',
+                        'path': str(recorder_mp4_path),
+                    }) + '\n\n').encode()
+                )
+            except Exception as e:  # noqa: BLE001 — recording is best-effort
+                traceback.print_exc()
+                await resp.write(
+                    ('event: log\ndata: ' + json.dumps({
+                        'event': 'recording_error',
+                        'error': f'failed to start recorder: {e}',
+                    }) + '\n\n').encode()
+                )
+                recorder = None  # don't try to .stop() something that never started
+
         sock = None
         try:
             # Connect once, stream all messages, close.
@@ -241,6 +338,41 @@ class HumanApi:
                     sock.close()
                 except Exception:
                     pass
+            # Stop the recorder regardless of how the profile run
+            # exited — we always want a usable MP4 (or a clean stop)
+            # even if the operator-socket send blew up mid-stream.
+            if recorder is not None:
+                try:
+                    await resp.write(
+                        ('event: log\ndata: ' + json.dumps(
+                            {'event': 'finalizing_recording'}) + '\n\n'
+                         ).encode())
+                except Exception:
+                    pass
+                try:
+                    final_path = recorder.stop()
+                    final_path = Path(final_path) if final_path else recorder_mp4_path
+                    payload = {
+                        'event': 'recording_ready',
+                        'url': recorder_url,
+                        'path': str(final_path),
+                    }
+                    try:
+                        await resp.write(
+                            ('event: log\ndata: ' + json.dumps(payload)
+                             + '\n\n').encode())
+                    except Exception:
+                        pass
+                except Exception as e:  # noqa: BLE001
+                    traceback.print_exc()
+                    try:
+                        await resp.write(
+                            ('event: log\ndata: ' + json.dumps({
+                                'event': 'recording_error',
+                                'error': f'recorder.stop failed: {e}',
+                            }) + '\n\n').encode())
+                    except Exception:
+                        pass
 
     # --- helpers ------------------------------------------------------------
 
@@ -252,6 +384,12 @@ class HumanApi:
         Raises KeyError if meta.json is missing the input_daemon block
         (i.e. the host has no GUI session — the GPU/input daemons were
         never launched, so there is nowhere to send OperatorMessages).
+
+        Cloud-carrier support: if meta.json carries a `transport` block
+        with `kind == "ssh-tunnel"`, we open (or reuse) an `ssh -L`
+        forwarding the remote UDS to a local path and return that
+        local path. The downstream caller treats it as a normal AF_UNIX
+        path — no other code change needed.
         """
         pattern = os.path.join(MICROVM_RUNTIME_BASE, f'{host_id}-*')
         matches = sorted(glob.glob(pattern))
@@ -280,7 +418,136 @@ class HumanApi:
                 f'host {host_id!r} has no GUI session: meta.json has no '
                 f'input_daemon.operator_socket (the vhost-user-input '
                 f'daemon was not started for this microVM)')
+
+        # Cloud-carrier dispatch: a `ssh-tunnel://<vm_id>/...` sentinel
+        # path means the operator socket lives in a cloud VM and must
+        # be reached via local-forward.
+        if isinstance(sock_path, str) and sock_path.startswith('ssh-tunnel://'):
+            transport = meta.get('transport') or {}
+            if transport.get('kind') != 'ssh-tunnel':
+                raise KeyError(
+                    f'host {host_id!r} operator_socket has ssh-tunnel:// '
+                    f'sentinel but meta.json transport block is missing '
+                    f'or wrong kind: {transport!r}')
+            if _SSH_TUNNEL_MGR is None:
+                raise RuntimeError(
+                    'SSHTunnelManager not available; cannot resolve '
+                    'cloud-carrier operator socket. Check '
+                    'plugins/human/app/ssh_tunnel.py imports.')
+            handle = _SSH_TUNNEL_MGR.get(host_id)
+            if handle is None:
+                handle = _SSH_TUNNEL_MGR.open_tunnel(transport, host_id)
+            return handle.local_path
+
         return sock_path
+
+    @staticmethod
+    def _resolve_vnc_endpoint(host_id: str):
+        """Return ``(host, port)`` for the GPU daemon's RFB endpoint.
+
+        For local UDS-transport carriers, the GPU daemon listens on
+        ``127.0.0.1:<vnc_port>`` directly — we just return that.
+
+        For ssh-tunnel cloud carriers, we (re)use the SSHTunnelManager
+        to publish a local TCP port forwarded to the remote VNC port,
+        and return that local port. Reusing one tunnel per VM means
+        repeated runs share the same forward.
+
+        Raises FileNotFoundError / KeyError on the same conditions as
+        ``_resolve_operator_socket``.
+        """
+        pattern = os.path.join(MICROVM_RUNTIME_BASE, f'{host_id}-*')
+        matches = sorted(glob.glob(pattern))
+        exact = os.path.join(MICROVM_RUNTIME_BASE, host_id)
+        if os.path.isdir(exact):
+            matches.append(exact)
+        if not matches:
+            raise FileNotFoundError(
+                f'no microVM runtime dir for host_id={host_id!r} '
+                f'under {MICROVM_RUNTIME_BASE}')
+        meta_path = os.path.join(matches[0], 'meta.json')
+        with open(meta_path) as f:
+            meta = json.load(f)
+        gpu = meta.get('gpu_daemon') or {}
+        vnc_port = gpu.get('vnc_port')
+        if not vnc_port:
+            raise KeyError(
+                f'host {host_id!r} has no GUI session: meta.json has no '
+                f'gpu_daemon.vnc_port (recording requires the framebuffer '
+                f'daemon to be running)')
+
+        transport = meta.get('transport') or {}
+        if transport.get('kind') == 'ssh-tunnel':
+            if _SSH_TUNNEL_MGR is None:
+                raise RuntimeError(
+                    'SSHTunnelManager not available; cannot resolve '
+                    'cloud-carrier VNC endpoint.')
+            # Reuse an existing tunnel if it's already a TCP one for
+            # this VM; otherwise open a fresh TCP -L for the VNC port.
+            handle = _SSH_TUNNEL_MGR.get(f'{host_id}-vnc')
+            if handle is None:
+                tcp_transport = dict(transport)
+                tcp_transport['remote_vnc_port'] = vnc_port
+                # Drop the UDS field so open_tunnel picks the TCP path.
+                tcp_transport.pop('remote_input_op_socket', None)
+                handle = _SSH_TUNNEL_MGR.open_tunnel(
+                    tcp_transport, f'{host_id}-vnc')
+            return ('127.0.0.1', int(handle.local_port))
+
+        return ('127.0.0.1', int(vnc_port))
+
+    async def api_recording(self, request):
+        """Serve an MP4 recording at
+        ``/plugin/human/api/recording/<vm_name>/<filename>``.
+
+        Defensive: rejects path traversal (``..`` / separators in
+        either segment) and non-mp4 filenames before touching the
+        filesystem; returns 404 when the file does not exist.
+        """
+        vm_name = request.match_info.get('vm_name', '')
+        filename = request.match_info.get('filename', '')
+
+        # Reject path-traversal characters in vm_name. The Range
+        # provider's vm_names are simple identifiers (no slashes).
+        if (not vm_name
+                or '/' in vm_name
+                or '\\' in vm_name
+                or vm_name in ('.', '..')
+                or vm_name.startswith('.')):
+            return web.json_response(
+                {'status': 'error', 'error': 'invalid vm_name'},
+                status=400)
+
+        if not _SAFE_MP4_FILENAME_RE.match(filename):
+            return web.json_response(
+                {'status': 'error',
+                 'error': 'filename must be a simple .mp4 name'},
+                status=400)
+
+        target = (Path(RECORDINGS_BASE) / vm_name / filename).resolve()
+        base = Path(RECORDINGS_BASE).resolve()
+        # Resolve-then-prefix-check defends against symlink escapes.
+        try:
+            target.relative_to(base)
+        except ValueError:
+            return web.json_response(
+                {'status': 'error',
+                 'error': 'recording path escapes recordings root'},
+                status=400)
+
+        if not target.is_file():
+            return web.json_response(
+                {'status': 'error',
+                 'error': f'recording {filename!r} not found for {vm_name!r}'},
+                status=404)
+
+        # FileResponse streams with sendfile() where the kernel + aiohttp
+        # support it; explicit Content-Type ensures the inline <video>
+        # element treats it as MP4.
+        return web.FileResponse(
+            target,
+            headers={'Content-Type': 'video/mp4'},
+        )
 
     @staticmethod
     def _load_profile_and_abilities(profile_id: str):
