@@ -674,11 +674,15 @@ onMounted(() => {
 
 /* Vertical 3-row layout:
      auto       hosts row  (fixed-height strip, ~200px)
-     minmax(50vh, 1fr)
-                viewer row (at least half the viewport height — guaranteed
+     minmax(75vh, 1fr)
+                viewer row (at least 75% of viewport height — guaranteed
                 real estate so the 16:9 frame isn't crushed when its
                 height: 100% would otherwise resolve through a chain of
-                auto-height ancestors)
+                auto-height ancestors). Bumped from 50vh to 75vh on
+                operator feedback ("make the height of Live Endpoint
+                50% larger keeping aspect of width") — height grows by
+                50%, the 16:9 frame's height: 100% then derives a
+                proportionally wider frame too.
      auto       command stream (sub-grid of 3 columns)
    The viewer row dominates the visible area — that's the whole point
    of this restructure. When the viewer is collapsed, .row-viewer
@@ -687,14 +691,14 @@ onMounted(() => {
    the freed space (see .human-grid.viewer-collapsed below). */
 .human-grid {
   display: grid;
-  grid-template-rows: auto minmax(50vh, 1fr) auto;
+  grid-template-rows: auto minmax(75vh, 1fr) auto;
   gap: 0.75rem;
   flex: 1 1 auto;
   min-height: 0;
 }
 
 /* Collapsed-viewer mode: shrink the viewer's grid track (override the
-   50vh minmax from the default template) and let the command stream
+   75vh minmax from the default template) and let the command stream
    use the freed vertical space. */
 .human-grid.viewer-collapsed {
   grid-template-rows: auto auto minmax(0, 1fr);
