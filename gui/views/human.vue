@@ -30,7 +30,7 @@
 
          The viewer is the dominant visual surface; the command stream
          stays ergonomic but secondary. -->
-    <div class="human-grid">
+    <div class="human-grid" :class="{ 'viewer-collapsed': viewerCollapsed }">
 
       <!-- ROW 1: HOSTS + SELECTED-HOST DETAIL ============================ -->
       <section class="row-hosts">
@@ -106,8 +106,11 @@
            component itself also gates connect() on `vmName` being non-
            empty, but we belt-and-suspenders this by only mounting once
            we have a host. -->
-      <section class="row-viewer">
-        <LiveEndpointViewer :vm-name="liveEndpointVmName">
+      <section class="row-viewer" :class="{ 'is-collapsed': viewerCollapsed }">
+        <LiveEndpointViewer
+          :vm-name="liveEndpointVmName"
+          @update:collapsed="viewerCollapsed = $event"
+        >
           <template #header-extra>
             <span
               v-if="currentStepIdx != null && selectedAbilitySteps.length"
@@ -297,6 +300,10 @@ const adhocInput = ref('')
 const hostFilter = ref('')
 const loading = ref(false)
 const rangeProfileName = ref('')       // populated from /hosts response if available
+// Mirrors LiveEndpointViewer's collapsed state so the page-grid can
+// reflow when the section is collapsed (giving the freed vertical
+// space to the command stream below). Session-only.
+const viewerCollapsed = ref(false)
 
 // Record-this-run toggle: wired into runProfileSse so the SSE handler
 // can spawn an RfbRecorder against the GPU daemon. Set per-host via
@@ -665,13 +672,24 @@ onMounted(() => {
      1fr   viewer row (fills remaining vertical space)
      auto  command stream (sub-grid of 3 columns)
    The 1fr row lets the LiveEndpointViewer dominate the visible area —
-   that's the whole point of this restructure. */
+   that's the whole point of this restructure. When the viewer is
+   collapsed, .row-viewer carries the .is-collapsed class so the row
+   tracks shrink to header-height instead of consuming 1fr. */
 .human-grid {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0.75rem;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/* Collapsed-viewer mode: shrink the viewer's grid track and let the
+   command stream use the freed vertical space. */
+.human-grid.viewer-collapsed {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+.human-grid.viewer-collapsed .row-command {
+  max-height: none;
 }
 
 /* ---------------- Row 1: hosts + selected-host ---------------- */
@@ -735,6 +753,11 @@ onMounted(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* Collapsed: pad less and let the row shrink to its header bar. */
+.row-viewer.is-collapsed {
+  padding: 0.5rem 0.75rem;
 }
 
 /* The LiveEndpointViewer fills .row-viewer; its CSS internally caps the

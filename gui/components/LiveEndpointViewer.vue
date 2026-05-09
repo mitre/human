@@ -17,7 +17,7 @@
     is surfaced as a "stub mode" placeholder rather than an endless retry
     loop.
   -->
-  <div class="live-endpoint">
+  <div class="live-endpoint" :class="{ 'is-collapsed': collapsed }">
     <div class="endpoint-header">
       <h3 class="title is-6 mb-0">
         Live Endpoint
@@ -34,18 +34,39 @@
         </span>
         <slot name="header-extra" />
       </h3>
-      <button
-        v-if="vmName && (state === 'failed' || state === 'stub' || retriesExhausted)"
-        class="button is-dark is-small"
-        @click="manualReconnect"
-      >
-        <span class="icon is-small"><i class="fas fa-sync-alt"></i></span>
-        <span>Retry</span>
-      </button>
+      <div class="endpoint-header-actions">
+        <button
+          v-if="vmName && (state === 'failed' || state === 'stub' || retriesExhausted)"
+          class="button is-dark is-small mr-2"
+          @click="manualReconnect"
+        >
+          <span class="icon is-small"><i class="fas fa-sync-alt"></i></span>
+          <span>Retry</span>
+        </button>
+        <!-- Collapse / expand chevron. v-show (NOT v-if) on the body below
+             keeps noVNC's RFB connection alive while the section is hidden,
+             so the operator can collapse for screen real estate without
+             tearing down the WebSocket. -->
+        <button
+          class="button is-dark is-small collapse-toggle"
+          :title="collapsed ? 'Expand Live Endpoint' : 'Collapse Live Endpoint'"
+          :aria-expanded="!collapsed"
+          @click="collapsed = !collapsed"
+        >
+          <span class="icon is-small">
+            <i
+              class="fas"
+              :class="collapsed ? 'fa-chevron-down' : 'fa-chevron-up'"
+            ></i>
+          </span>
+        </button>
+      </div>
     </div>
 
-    <!-- 4:3 aspect-ratio viewport. The canvas auto-fills via :deep(canvas). -->
-    <div class="viewport-frame">
+    <!-- 4:3 aspect-ratio viewport. The canvas auto-fills via :deep(canvas).
+         v-show (not v-if) so the noVNC RFB instance & WebSocket stay alive
+         when the section is collapsed. -->
+    <div class="viewport-frame" v-show="!collapsed">
       <div class="viewport-aspect">
         <!-- No host selected: pure CSS placeholder; component does NOT
              attempt to instantiate RFB until vmName is non-empty. -->
@@ -119,11 +140,21 @@ const props = defineProps({
   vmName: { type: String, default: '' },
 })
 
+// Notify the parent when the operator collapses/expands the section so
+// the page-level grid can redistribute vertical space (give the freed
+// real estate to the command stream below).
+const emit = defineEmits(['update:collapsed'])
+
 // state ∈ 'idle' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'stub'
 const state = ref('idle')
 const errorMessage = ref('')
 const retryAttempt = ref(0)
 const screen = ref(null)
+
+// Section collapse state. Session-only (no localStorage). The viewer body
+// uses v-show, so the noVNC RFB / WebSocket stays alive while collapsed.
+const collapsed = ref(false)
+watch(collapsed, (v) => emit('update:collapsed', v))
 
 const MAX_RETRIES = 5
 const RETRY_DELAY_MS = 2000
@@ -337,9 +368,33 @@ defineExpose({ vncWsUrl, MAX_RETRIES, RETRY_DELAY_MS })
   margin-bottom: 0.5rem;
 }
 
-/* The frame fills its parent. The aspect-ratio child caps the actual
-   canvas at 4:3 (matching the 1024x768 native framebuffer) and centers
-   it horizontally so wide containers don't stretch the picture. */
+.endpoint-header-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.collapse-toggle {
+  /* Square-ish chevron-only button; lets the title stretch naturally. */
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+/* When collapsed, drop bottom-margin from the header so the section
+   shrinks to a single bar and the page redistributes the freed space. */
+.live-endpoint.is-collapsed .endpoint-header {
+  margin-bottom: 0;
+}
+.live-endpoint.is-collapsed {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 0;
+}
+
+/* The frame fills its parent. The aspect-ratio child fills as much of the
+   parent as possible while keeping 4:3, picking whichever of width or
+   height is the constraining dimension. No hard 1024-px cap so tall
+   browser windows produce taller (more monitor-shaped) canvases. */
 .viewport-frame {
   flex: 1 1 auto;
   min-height: 0;
@@ -356,13 +411,19 @@ defineExpose({ vncWsUrl, MAX_RETRIES, RETRY_DELAY_MS })
 .viewport-aspect {
   position: relative;
   aspect-ratio: 4 / 3;
-  /* Take the larger of: width that fits parent, OR height that fits
-     parent. CSS picks the smaller dimension automatically because of the
-     aspect-ratio constraint plus max-width/max-height. */
-  max-width: min(100%, 1024px);
-  max-height: min(100%, 768px);
-  width: 100%;
+  /* Use ALL the vertical space first (height: 100%), then derive width
+     from the 4:3 aspect ratio. max-width: 100% caps us at the parent's
+     width when the row is narrower-than-tall (then aspect-ratio derives
+     height from width instead). margin: 0 auto centers horizontally
+     when the parent is wider than the resulting canvas. This replaces
+     the previous `max-width: min(100%, 1024px); max-height: min(100%,
+     768px)` rule, which capped the frame at 1024x768 and wasted any
+     vertical real estate beyond 768px. */
   height: 100%;
+  width: auto;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0 auto;
   background: #000;
 }
 
