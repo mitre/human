@@ -1,3 +1,6 @@
+import glob
+import json
+import logging
 import os
 import sys
 import zipfile
@@ -8,6 +11,14 @@ from importlib import import_module
 from app.utility.base_service import BaseService
 from plugins.human.app.c_human import Human
 from plugins.human.app.c_workflow import Workflow
+
+# Import the canonical runtime base from human_api so the dropdown
+# scans the same directory the SSE handler / _resolve_operator_socket
+# read from. Tests patch human_api.MICROVM_RUNTIME_BASE; we re-read
+# it dynamically below to honor that.
+from plugins.human.app import human_api as _human_api
+
+_log = logging.getLogger(__name__)
 
 
 class HumanService(BaseService):
@@ -46,23 +57,19 @@ class HumanService(BaseService):
     async def list_range_hosts(self):
         """Return the active range's host inventory.
 
-        TODO: replace the stub with a real lookup against the Range plugin.
-        Two reasonable paths once the contract is firm:
-          1. Pull from the Range plugin's in-process data store (e.g. via
-             `self.data_svc.locate('range_instances')` if the Range plugin
-             registers under data_svc).
-          2. Use an internal HTTP call against the routes registered in
-             plugins/range/hook.py (`POST /plugin/range/onprem/hosts`,
-             `POST /plugin/range/cloud/inventory`, ...).
-        For now we hand back a deterministic stub so the Vue layer has
-        something to render.
+        Resolution order:
+          1. If the Range plugin ever publishes hosts through
+             ``data_svc.locate('range_instances')`` we prefer that
+             (forward-compat — Range doesn't currently publish here).
+          2. Otherwise, scan ``<MICROVM_RUNTIME_BASE>/*/meta.json`` —
+             this is what the Range provider's A3 microvm-launch agent
+             writes once a microVM is up. Mirrors the lookup pattern
+             in ``HumanApi._resolve_operator_socket``.
+          3. If no meta.json files exist (fresh dev box), fall back to
+             a deterministic stub so the Vue layer still renders.
         """
-        try:
-            services = self.get_services() if hasattr(self, 'get_services') else None
-        except Exception:
-            services = None
-
-        # If the Range plugin ever exposes hosts through data_svc, prefer that.
+        # 1. Forward-compat: prefer the Range plugin's in-process data
+        # store if it ever publishes there.
         try:
             range_hosts = await self.data_svc.locate('range_instances')
             if range_hosts:
@@ -72,10 +79,16 @@ class HumanService(BaseService):
                 }
         except Exception:
             # data_svc.locate raises for unknown collections; that's fine,
-            # it just means the Range plugin hasn't published anything we
-            # can read directly. Fall through to the stub.
+            # fall through to the meta.json scan.
             pass
 
+        # 2. Scan meta.json files written by the Range provider.
+        hosts = self._scan_microvm_meta()
+        if hosts:
+            return {'profile': '(active range)', 'hosts': hosts}
+
+        # 3. No microVMs running — return stubs so the dropdown is
+        # populated on a fresh dev box (preserves pre-G6a behavior).
         return {
             'profile': '(stub)',
             'hosts': [
@@ -85,6 +98,47 @@ class HumanService(BaseService):
                  'status': 'unknown', 'vnc_ws': None},
             ],
         }
+
+    @staticmethod
+    def _scan_microvm_meta():
+        """Glob ``<BASE>/*/meta.json`` and return UI-shaped host dicts.
+
+        Re-reads ``human_api.MICROVM_RUNTIME_BASE`` on every call so
+        tests that patch the module global pick up the new value, and
+        so an env-var change at runtime is honored.
+
+        Malformed / unreadable meta.json files are skipped + logged
+        (one bad file should not blank the dropdown).
+        """
+        base = getattr(_human_api, 'MICROVM_RUNTIME_BASE',
+                       '/tmp/timestone-microvms')
+        pattern = os.path.join(base, '*', 'meta.json')
+        out = []
+        for meta_path in sorted(glob.glob(pattern)):
+            try:
+                with open(meta_path) as f:
+                    meta = json.load(f)
+            except Exception as e:
+                _log.warning('skipping unreadable meta.json at %s: %s',
+                             meta_path, e)
+                continue
+            vm_name = meta.get('vm_name')
+            ip = meta.get('ip')
+            if not vm_name or not ip:
+                _log.warning('skipping meta.json at %s: missing required '
+                             'fields (vm_name=%r, ip=%r)',
+                             meta_path, vm_name, ip)
+                continue
+            out.append({
+                'id':       vm_name,
+                'name':     vm_name,
+                'ip':       ip,
+                'os':       meta.get('os', 'unknown'),
+                'status':   'running',
+                'provider': 'microvm',
+                'vnc_ws':   None,
+            })
+        return out
 
     async def list_live_workflows(self):
         """Return workflows that the control_server can execute.
