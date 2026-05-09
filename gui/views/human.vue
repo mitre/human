@@ -212,25 +212,14 @@
           <div class="cmd-col cmd-args">
             <div class="field">
               <label class="label is-small">Args (passed to human ability)</label>
-              <div class="field has-addons mb-1">
-                <div class="control is-expanded">
-                  <input
-                    class="input is-small"
-                    type="text"
-                    placeholder="--flag value ..."
-                    v-model="argsInput"
-                    @keyup.enter="runAssignedWorkflow"
-                  />
-                </div>
-                <div class="control">
-                  <button
-                    class="button is-dark is-small"
-                    :disabled="!assignments[selectedHostId]?.workflow_id"
-                    @click="runAssignedWorkflow"
-                  >
-                    Run
-                  </button>
-                </div>
+              <div class="control mb-1">
+                <input
+                  class="input is-small"
+                  type="text"
+                  placeholder="--flag value ..."
+                  v-model="argsInput"
+                  @keyup.enter="runAssignedWorkflow"
+                />
               </div>
               <label class="checkbox is-size-7">
                 <input type="checkbox" v-model="record" />
@@ -280,6 +269,23 @@
             </pre>
           </div>
 
+        </div>
+
+        <!-- Bottom action bar: primary Run + secondary Clear. Lives below
+             the 3-col command grid so the Run button is the first thing
+             the operator sees / clicks once they've picked an ability and
+             filled in args. -->
+        <div v-if="selectedHost" class="command-actions">
+          <button
+            class="button is-primary"
+            :disabled="!assignments[selectedHostId]?.workflow_id"
+            @click="runAssignedWorkflow"
+          >
+            Run
+          </button>
+          <button class="button is-light" @click="clearForm">
+            Clear
+          </button>
         </div>
       </section>
     </div>
@@ -450,6 +456,21 @@ function assignWorkflow(wf) {
   if (!selectedHostId.value) return
   const a = ensureAssignment(selectedHostId.value)
   a.workflow_id = wf.id
+}
+
+// Resets the row-3 form selections for the currently-selected host:
+// clears the chosen Human Ability, Args input, Record toggle, and the
+// Ad-hoc command line. Does NOT touch the output log — that has its own
+// "Clear log" button in the page header.
+function clearForm() {
+  if (selectedHostId.value) {
+    const a = ensureAssignment(selectedHostId.value)
+    a.workflow_id = null
+    a.args = ''
+  }
+  argsInput.value = ''
+  record.value = false
+  adhocInput.value = ''
 }
 
 async function fetchHosts() {
@@ -789,9 +810,15 @@ onMounted(() => {
   border-radius: 4px;
   padding: 0.75rem;
   min-height: 280px;
-  max-height: 360px;
+  max-height: 420px;        /* bumped to accommodate bottom action bar */
   overflow: visible;        /* let dropdowns escape */
   position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.row-command > .command-grid {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .command-grid {
@@ -800,6 +827,17 @@ onMounted(() => {
   gap: 0.75rem;
   height: 100%;
   min-height: 0;
+}
+
+/* Bottom action bar inside .row-command: [Run] [Clear] aligned to the
+   left, with a small gap. Padding-top separates it from the 3-col grid
+   above. The Run button is the page's primary action so it gets Bulma's
+   is-primary (Caldera purple); Clear is is-light to read as secondary. */
+.command-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  justify-content: flex-start;
 }
 
 .cmd-col {
