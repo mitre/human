@@ -24,16 +24,30 @@ except Exception:  # noqa: BLE001 — module-load defensive
     _SSH_TUNNEL_MGR = None
 
 # Where the SSE handler writes recorded MP4s. One subdir per VM keeps
-# operator-side cleanup straightforward (and matches the convention
-# used elsewhere in the runtime tree).
+# operator-side cleanup straightforward. Default lives under the plugin's
+# own ``data/recordings/`` so operators expecting plugin-owned files in
+# the plugin tree (alongside ``data/abilities/``, ``data/adversaries/``)
+# find them in the obvious place. The legacy
+# ``/var/lib/timestone/recordings/`` location is no longer written to;
+# operators clean it up manually.
+HUMAN_PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_RECORDINGS_BASE = str(HUMAN_PLUGIN_ROOT / 'data' / 'recordings')
 RECORDINGS_BASE = os.environ.get(
-    'TIMESTONE_RECORDINGS_BASE', '/var/lib/timestone/recordings'
+    'TIMESTONE_RECORDINGS_BASE', _DEFAULT_RECORDINGS_BASE
 )
 
 # Filenames the MP4-serving endpoint will accept. Defensive: enforce
 # .mp4 suffix and reject anything containing a path separator or '..'
 # component before we touch the filesystem.
 _SAFE_MP4_FILENAME_RE = re.compile(r'^[A-Za-z0-9._-]+\.mp4$')
+
+# Filenames written by the recorder use ``<YYYYMMDD-HHMMSS>-<id>.mp4``
+# (see ``api_run_profile`` below). The index endpoint parses this back
+# into a sortable ISO timestamp + the ability/profile id; malformed
+# names fall through to a None timestamp and the file is still listed.
+_RECORDING_FILENAME_RE = re.compile(
+    r'^(?P<date>\d{8})-(?P<time>\d{6})-(?P<ability>[A-Za-z0-9._-]+)\.mp4$'
+)
 
 
 def _parse_bool(value) -> bool:
@@ -65,8 +79,8 @@ MICROVM_RUNTIME_BASE = os.environ.get(
 
 # Canonical atomic-abilities directory for HID profiles. Hard-coded for
 # now (Phase C); when more profile collections land we can lift this to
-# a config knob.
-HUMAN_PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+# a config knob. ``HUMAN_PLUGIN_ROOT`` is defined above with the
+# recordings-base default.
 ATOMIC_ABILITIES_DIR = HUMAN_PLUGIN_ROOT / 'data' / 'abilities' \
     / 'benign-human-activity' / 'atomic'
 ADVERSARIES_DIR = HUMAN_PLUGIN_ROOT / 'data' / 'adversaries'
@@ -546,6 +560,131 @@ class HumanApi:
             return ('127.0.0.1', int(handle.local_port))
 
         return ('127.0.0.1', int(vnc_port))
+
+    async def api_recordings_index(self, request):
+        """Return the catalog of MP4 recordings under ``RECORDINGS_BASE``.
+
+        Walks ``<base>/<vm_name>/<file>.mp4`` and returns a sorted list
+        (newest first) the UI's "Recordings" section can populate its
+        dropdown from. Missing/malformed filenames are skipped with a
+        traceback to stderr — we never crash the index because one file
+        is weird.
+
+        Filename convention: ``<YYYYMMDD-HHMMSS>-<ability>.mp4``. The
+        ability segment is whatever was passed as ``profile_id`` to the
+        run-profile SSE — usually the ability stem or a UUID. Both are
+        echoed back verbatim; the UI is responsible for any prettier
+        labelling.
+        """
+        base = Path(RECORDINGS_BASE)
+        recordings = []
+        if base.is_dir():
+            for vm_dir in sorted(base.iterdir()):
+                if not vm_dir.is_dir():
+                    continue
+                vm_name = vm_dir.name
+                # Skip suspect dir names so we never hand out a path
+                # segment that would later fail the api_recording
+                # handler's vm_name validation.
+                if (vm_name in ('.', '..')
+                        or vm_name.startswith('.')
+                        or '/' in vm_name
+                        or '\\' in vm_name):
+                    continue
+                for mp4 in sorted(vm_dir.glob('*.mp4')):
+                    if not _SAFE_MP4_FILENAME_RE.match(mp4.name):
+                        # Defensive: a manually-dropped weird filename
+                        # would break the playback URL contract.
+                        continue
+                    try:
+                        size_bytes = mp4.stat().st_size
+                    except OSError:
+                        traceback.print_exc()
+                        continue
+                    iso_ts = None
+                    ability = None
+                    m = _RECORDING_FILENAME_RE.match(mp4.name)
+                    if m:
+                        d = m.group('date')
+                        t = m.group('time')
+                        try:
+                            iso_ts = datetime.strptime(
+                                d + t, '%Y%m%d%H%M%S').isoformat()
+                        except ValueError:
+                            iso_ts = None
+                        ability = m.group('ability')
+                    recordings.append({
+                        'vm_name': vm_name,
+                        'filename': mp4.name,
+                        'ability': ability,
+                        'timestamp': iso_ts,
+                        'size_bytes': size_bytes,
+                        'url': (
+                            f'/plugin/human/api/recording/{vm_name}/'
+                            f'{mp4.name}'),
+                    })
+        # Newest-first. Files with no parseable timestamp drop to the
+        # bottom but remain visible.
+        recordings.sort(
+            key=lambda r: (r['timestamp'] or ''), reverse=True)
+        return web.json_response({'recordings': recordings})
+
+    async def api_recording_delete(self, request):
+        """Delete an MP4 at
+        ``DELETE /plugin/human/api/recording/<vm_name>/<filename>``.
+
+        Same path-validation rules as ``api_recording`` (no separators,
+        no traversal, must be ``.mp4``). 404 if the file does not
+        exist; otherwise unlinks it and returns 200 with the freed
+        path. Empty vm_name dirs are pruned so the index doesn't show
+        a phantom group.
+        """
+        vm_name = request.match_info.get('vm_name', '')
+        filename = request.match_info.get('filename', '')
+
+        if (not vm_name
+                or '/' in vm_name
+                or '\\' in vm_name
+                or vm_name in ('.', '..')
+                or vm_name.startswith('.')):
+            return web.json_response(
+                {'status': 'error', 'error': 'invalid vm_name'},
+                status=400)
+        if not _SAFE_MP4_FILENAME_RE.match(filename):
+            return web.json_response(
+                {'status': 'error',
+                 'error': 'filename must be a simple .mp4 name'},
+                status=400)
+
+        target = (Path(RECORDINGS_BASE) / vm_name / filename).resolve()
+        base = Path(RECORDINGS_BASE).resolve()
+        try:
+            target.relative_to(base)
+        except ValueError:
+            return web.json_response(
+                {'status': 'error',
+                 'error': 'recording path escapes recordings root'},
+                status=400)
+        if not target.is_file():
+            return web.json_response(
+                {'status': 'error',
+                 'error': f'recording {filename!r} not found for {vm_name!r}'},
+                status=404)
+        try:
+            target.unlink()
+        except OSError as e:
+            return web.json_response(
+                {'status': 'error',
+                 'error': f'failed to unlink: {e}'}, status=500)
+        # Best-effort prune of an empty VM dir so the dropdown doesn't
+        # keep listing a host with zero recordings.
+        try:
+            if not any(target.parent.iterdir()):
+                target.parent.rmdir()
+        except OSError:
+            pass
+        return web.json_response(
+            {'status': 'ok', 'deleted': str(target)})
 
     async def api_recording(self, request):
         """Serve an MP4 recording at

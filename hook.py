@@ -48,5 +48,15 @@ async def enable(services):
     app.router.add_route(
         'GET', '/plugin/human/api/recording/{vm_name}/{filename}',
         human_api.api_recording)
+    # Catalog of recorded MP4s — feeds the "Recordings" collapsible
+    # section in human.vue. JSON list, sorted newest-first.
+    app.router.add_route(
+        'GET', '/plugin/human/api/recordings',
+        human_api.api_recordings_index)
+    # Operator-initiated cleanup of a single MP4 (delete button next
+    # to each entry in the Recordings dropdown).
+    app.router.add_route(
+        'DELETE', '/plugin/human/api/recording/{vm_name}/{filename}',
+        human_api.api_recording_delete)
 
     app.router.add_static('/human', 'plugins/human/static', append_version=True)
