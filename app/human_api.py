@@ -98,29 +98,6 @@ class HumanApi:
     async def splash(self, request):
         return dict()
 
-    # --- Legacy routes (kept so the old cradle-builder keeps working until ---
-    # --- it is fully retired). The new live UI uses /plugin/human/api/*. ---
-
-    async def human_workflows(self, request):
-        return web.json_response([w.display for w in await self.data_svc.locate('workflows')])
-
-    async def human_humans(self, request):
-        return web.json_response([h.display for h in await self.data_svc.locate('humans')])
-
-    async def rest_api(self, request):
-        try:
-            data = dict(await request.json())
-            index = data.pop('index')
-            options = dict(
-                POST=dict(
-                    build_human=lambda d: self.human_svc.build_human(d),
-                    load_human=lambda d: self.human_svc.load_humans(d),
-                )
-            )
-            return web.json_response(await options[request.method][index](data))
-        except Exception:
-            traceback.print_exc()
-
     # --- Timestone live UI routes -------------------------------------------
 
     async def api_hosts(self, request):

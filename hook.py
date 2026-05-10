@@ -26,11 +26,13 @@ async def enable(services):
     await human_svc.load_available_workflows()
     human_api = HumanApi(services=services, human_svc=human_svc)
 
-    # Splash + legacy cradle-builder routes (kept for backwards compat)
+    # Splash page (Caldera plugin entrypoint, mounted at the address
+    # declared at module top). The legacy cradle-builder API routes
+    # (/plugin/human/api, /plugin/human/workflows, /plugin/human/humans)
+    # were removed in chore/human-efficiency-cleanup — no Vue caller
+    # ever hit them and the alpine.js cradle-builder template that
+    # consumed them is no longer wired into Caldera's plugin sidebar.
     app.router.add_route('GET', '/plugin/human/gui', human_api.splash)
-    app.router.add_route('*',   '/plugin/human/api', human_api.rest_api)
-    app.router.add_route('GET', '/plugin/human/workflows', human_api.human_workflows)
-    app.router.add_route('GET', '/plugin/human/humans', human_api.human_humans)
 
     # Timestone live-UI routes
     app.router.add_route('GET',  '/plugin/human/api/hosts',     human_api.api_hosts)
