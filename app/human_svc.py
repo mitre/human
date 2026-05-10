@@ -45,6 +45,21 @@ class HumanService(BaseService):
         return [h.display for h in await self.data_svc.locate('humans', match=dict(name=data.get('name')))]
 
     async def load_available_workflows(self):
+        # The pyhuman/* python workflows are the deprecated pre-HID runtime
+        # (see pyhuman/DEPRECATED.md). They drag in selenium / pyautogui /
+        # PERSONAS etc., which are not installed in the current dev env;
+        # importing them at startup spams ~12 'No module named X' errors
+        # per Caldera restart and adds ~5s of import-time overhead.
+        #
+        # Default behavior: skip them. Operators who still need the legacy
+        # cradle-builder workflows can opt in with HUMAN_LEGACY_PYHUMAN=1.
+        if os.environ.get('HUMAN_LEGACY_PYHUMAN', '').lower() not in ('1', 'true', 'yes'):
+            self.log.debug(
+                'Skipping legacy pyhuman workflow discovery '
+                '(set HUMAN_LEGACY_PYHUMAN=1 to re-enable)'
+            )
+            return
+
         root = os.path.join(self.pyhuman_path, 'app', 'workflows')
         for f in os.listdir(root):
             if os.path.isfile(os.path.join(root, f)) and not f[0] == '_':
