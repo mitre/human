@@ -1,0 +1,40 @@
+---
+
+- id: 7b68cf5d-06fd-4079-9f97-e144690f14d5
+  name: Legacy - Open Webmail
+  description: |
+    HID translation of pyhuman/app/workflows/open_email.py.
+
+    Original: pick a random URL from {gmail, outlook}, navigate via
+    selenium, idle for ~15 s while scrolling and probing `<a>` chrome
+    elements (no login, no submit).
+
+    HID equivalent: open browser, navigate to one webmail, scroll and
+    dwell to mimic "looking at the sign-in card", then second tab to
+    the other webmail. Visits both providers in one run because legacy
+    workflow's random-choice doesn't translate to a deterministic
+    profile.
+  adversary_persona: benign-office-worker
+  duration_estimate_s: 60
+  tags:
+    - benign-human-activity
+    - human-profile
+    - legacy-port
+    - webmail
+  steps:
+    - { ability: open-default-browser }
+    - { ability: dwell-natural }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://mail.google.com" } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 2 } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: up, ticks: 2 } }
+    - { ability: dwell-natural }
+    - { ability: open-new-tab }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://outlook.live.com" } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 3 } }
+    - { ability: dwell-reading }
+    - { ability: dwell-natural }

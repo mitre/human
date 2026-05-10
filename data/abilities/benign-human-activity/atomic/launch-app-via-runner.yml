@@ -1,0 +1,47 @@
+---
+
+- id: launch-app-via-runner
+  name: Launch App via OS Runner
+  description: |
+    Generic launcher: opens the platform-native runner (Win+R / GNOME
+    activities / Spotlight), types an app name, and presses Enter. Same
+    keystroke shape as open-default-browser but parameterized so legacy
+    workflows can launch notepad, soffice, mspaint, calc.exe, etc.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_launch_app
+    name: Benign User Activity - Launch App
+  plugin: human
+  tags: [interaction, launch]
+  args:
+    app_command:
+      description: Command typed into the launcher to start the app.
+      default: notepad
+    settle_ms:
+      description: How long to wait_for after Enter so the app window paints.
+      default: 3000
+  platforms:
+    windows:
+      steps:
+        - { action: chord, keys: [LeftMeta, r], hold_ms: 50 }
+        - { action: dwell, ms: 400 }
+        - { action: type, text: "{{ args.app_command }}", per_char_ms: 90 }
+        - { action: dwell, ms: 200 }
+        - { action: press, key: Enter }
+        - { action: wait_for, ms: "{{ args.settle_ms }}" }
+    linux:
+      steps:
+        - { action: press, key: LeftMeta }
+        - { action: dwell, ms: 500 }
+        - { action: type, text: "{{ args.app_command }}", per_char_ms: 90 }
+        - { action: dwell, ms: 300 }
+        - { action: press, key: Enter }
+        - { action: wait_for, ms: "{{ args.settle_ms }}" }
+    darwin:
+      steps:
+        - { action: chord, keys: [LeftMeta, space], hold_ms: 50 }
+        - { action: dwell, ms: 400 }
+        - { action: type, text: "{{ args.app_command }}", per_char_ms: 90 }
+        - { action: dwell, ms: 200 }
+        - { action: press, key: Enter }
+        - { action: wait_for, ms: "{{ args.settle_ms }}" }

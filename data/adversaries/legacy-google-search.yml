@@ -1,0 +1,44 @@
+---
+
+- id: b49acc35-e7b6-4888-aed0-f32439a86e9c
+  name: Legacy - Google Search
+  description: |
+    HID translation of pyhuman/app/workflows/google_search.py.
+
+    Original: navigate to google.com via selenium, type a random term
+    into the `name=q` input, submit, then either click "I'm Feeling
+    Lucky" or browse search-result pages by clicking `LINK_TEXT="Next"`
+    via ActionChains.
+
+    HID equivalent: open browser, navigate to google.com, focus
+    address bar with `?` style URL — easier on HID than locating a
+    page input — and use the omnibox-as-search behavior (every modern
+    browser routes plain text through the default engine). Then scroll
+    through results and dwell. Skips the lucky button and
+    next-page-clicking because they require coordinate or DOM-text
+    targeting that has no faithful HID analog.
+  adversary_persona: researcher
+  duration_estimate_s: 60
+  tags:
+    - benign-human-activity
+    - human-profile
+    - legacy-port
+    - search
+  steps:
+    - { ability: open-default-browser }
+    - { ability: dwell-natural }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://www.google.com" } }
+    - { ability: dwell-natural }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://www.google.com/search?q=caldera+adversary+emulation" } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 4 } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 3 } }
+    - { ability: dwell-natural }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://www.google.com/search?q=mitre+att%26ck+matrix" } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 5 } }
+    - { ability: dwell-natural }

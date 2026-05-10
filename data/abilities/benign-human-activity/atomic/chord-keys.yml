@@ -1,0 +1,36 @@
+---
+
+- id: chord-keys
+  name: Chord Keys
+  description: |
+    Fire an arbitrary keyboard chord — used when no more-specific
+    atomic exists. The `keys` arg is a list of daemon-vocabulary key
+    names (e.g. [LeftControl, s], [LeftAlt, F4]). 80 ms hold by default.
+    Translated legacy workflows lean on this for save/quit/select-all
+    style chords.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_chord_keys
+    name: Benign User Activity - Chord Keys
+  plugin: human
+  tags: [interaction, keyboard]
+  args:
+    keys:
+      description: List of key names making up the chord, e.g. [LeftControl, s].
+      default: [LeftControl, s]
+    hold_ms:
+      description: How long to hold the chord before release.
+      default: 80
+  platforms:
+    windows:
+      steps:
+        - { action: chord, keys: "{{ args.keys }}", hold_ms: "{{ args.hold_ms }}" }
+        - { action: dwell, ms: 200 }
+    linux:
+      steps:
+        - { action: chord, keys: "{{ args.keys }}", hold_ms: "{{ args.hold_ms }}" }
+        - { action: dwell, ms: 200 }
+    darwin:
+      steps:
+        - { action: chord, keys: "{{ args.keys }}", hold_ms: "{{ args.hold_ms }}" }
+        - { action: dwell, ms: 200 }

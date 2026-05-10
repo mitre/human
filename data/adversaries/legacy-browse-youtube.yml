@@ -1,0 +1,43 @@
+---
+
+- id: cdc7292a-911a-4603-91d6-85ab5a488a23
+  name: Legacy - Browse YouTube
+  description: |
+    HID translation of pyhuman/app/workflows/browse_youtube.py.
+
+    Original: open youtube.com, type a random search term into the
+    search bar (selenium element lookup), submit, wait, click a random
+    result via element.click(), watch 2-150 s, then click through up to
+    10 suggested videos.
+
+    HID equivalent: open browser, navigate to youtube.com, focus the
+    in-page search via Ctrl+F (legacy uses element-by-id; we
+    substitute the keyboard-driven search), then dwell to simulate
+    watching, plus scroll/dwell cycles for the suggested-video
+    loop. No coordinate-based result-clicking — selenium DOM-walking
+    has no robust HID analog.
+  adversary_persona: researcher
+  duration_estimate_s: 180
+  tags:
+    - benign-human-activity
+    - human-profile
+    - legacy-port
+    - youtube
+  steps:
+    - { ability: open-default-browser }
+    - { ability: dwell-natural }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://www.youtube.com" } }
+    - { ability: dwell-reading }
+    - { ability: focus-page-search, args: { query: "lo-fi study music" } }
+    - { ability: dwell-reading, args: { min_ms: 8000, max_ms: 20000 } }
+    - { ability: scroll-page, args: { direction: down, ticks: 5 } }
+    - { ability: dwell-reading, args: { min_ms: 10000, max_ms: 30000 } }
+    - { ability: scroll-page, args: { direction: down, ticks: 4 } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: up, ticks: 3 } }
+    - { ability: dwell-natural }
+    - { ability: focus-page-search, args: { query: "guitar tutorial" } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 6 } }
+    - { ability: dwell-natural }

@@ -1,0 +1,47 @@
+---
+
+- id: c806a2b9-0d69-40dd-a025-8edce77dcd75
+  name: Legacy - Idle Web Browse
+  description: |
+    HID translation of pyhuman/app/workflows/browse_web.py.
+
+    Original (selenium-driven): pick a random domain from
+    data/websites.txt, navigate to it, sleep 1-20 s, then issue up to
+    15 random `<a>` clicks via WebDriver.element.click().
+
+    HID equivalent: launch the default browser, navigate to a fixed
+    representative URL (selenium's per-page DOM-walk has no HID analog,
+    so we substitute a sequence of dwell-and-scroll cycles plus a
+    couple of "click random link" wheel/move events). Mirrors the
+    human-observable cadence of the legacy workflow.
+  adversary_persona: benign-office-worker
+  duration_estimate_s: 90
+  tags:
+    - benign-human-activity
+    - human-profile
+    - legacy-port
+    - browsing
+  steps:
+    - { ability: open-default-browser }
+    - { ability: dwell-natural }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://www.wikipedia.org" } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 3 } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 4 } }
+    - { ability: dwell-natural }
+    - { ability: scroll-page, args: { direction: up, ticks: 2 } }
+    - { ability: dwell-natural }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://www.bbc.com/news" } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 5 } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 3 } }
+    - { ability: dwell-natural }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://en.wikipedia.org/wiki/Special:Random" } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 4 } }
+    - { ability: dwell-natural }

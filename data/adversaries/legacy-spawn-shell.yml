@@ -1,0 +1,39 @@
+---
+
+- id: ced55d8f-40c0-4d44-9ea8-5c7cd36b9703
+  name: Legacy - Spawn Shell
+  description: |
+    HID translation of pyhuman/app/workflows/spawn_shell.py.
+
+    Original: subprocess.Popen('dir' on Windows, 'ls -la' elsewhere)
+    in shell mode, sleep 5 s, kill the process. The shell didn't have
+    a visible UI — it ran headless under the workflow's process.
+
+    HID equivalent: open the Run dialog, type `cmd`, Enter; once the
+    cmd window has focus, type `dir`, Enter, dwell, then `exit`,
+    Enter. Linux uses gnome-terminal; macOS opens Terminal.app via
+    Spotlight. Now an HID-visible cmd-window event chain rather than a
+    headless subprocess.
+  adversary_persona: developer
+  duration_estimate_s: 30
+  tags:
+    - benign-human-activity
+    - human-profile
+    - legacy-port
+    - shell
+  steps:
+    - { ability: launch-app-via-runner, args: { app_command: "cmd", settle_ms: 3000 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1500 } }
+
+    # Run a benign listing.
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "dir", per_char_ms: 90 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 2500 } }
+
+    # Pretend to read the output.
+    - { ability: dwell-reading, args: { min_ms: 5000, max_ms: 8000 } }
+
+    # Exit the shell.
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "exit", per_char_ms: 90 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 800 } }

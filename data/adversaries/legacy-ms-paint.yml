@@ -1,0 +1,39 @@
+---
+
+- id: efd3531a-148b-41e5-b312-09de4b9e78bb
+  name: Legacy - MS Paint Save
+  description: |
+    HID translation of pyhuman/app/workflows/ms_paint.py.
+
+    Original: os.startfile mspaint.exe, Ctrl+S, type unixtime as
+    filename, Enter, Alt+F4 to close. No actual drawing — the legacy
+    workflow only created a blank file.
+
+    HID equivalent: launch mspaint via the Run dialog, dwell, Ctrl+S,
+    type a fixed filename, Enter, Alt+F4. Pure-keyboard so it works on
+    Windows without coordinate sensitivity. Linux/Darwin branches
+    don't apply (no MS Paint), so this profile is windows-only.
+  adversary_persona: benign-office-worker
+  duration_estimate_s: 25
+  tags:
+    - benign-human-activity
+    - human-profile
+    - legacy-port
+    - paint
+    - windows-only
+  steps:
+    - { ability: launch-app-via-runner, args: { app_command: "mspaint", settle_ms: 4000 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 2000 } }
+
+    # Ctrl+S opens "Save As" since the canvas is unnamed.
+    - { ability: chord-keys, args: { keys: [LeftControl, s], hold_ms: 80 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1500 } }
+
+    # Type a filename, then Enter.
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "legacy-paint-canvas", per_char_ms: 80 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1500 } }
+
+    # Close window via Alt+F4.
+    - { ability: chord-keys, args: { keys: [LeftAlt, F4], hold_ms: 80 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 800 } }

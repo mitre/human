@@ -1,0 +1,78 @@
+---
+
+- id: d53b5ddd-dd60-47fa-8b99-0f5b879949ef
+  name: Legacy - Open Office Writer
+  description: |
+    HID translation of pyhuman/app/workflows/open_office_writer.py.
+
+    Original: launch OpenOffice via os.startfile, press 'd' to pick
+    the document role, then loop 6-15 random actions chosen from
+    {save_pdf, write_sentence, write_paragraph, copy_paste,
+    insert_comment, find, delete_text, format_text} via pyautogui.
+    Each action is itself a small chord+typewrite sequence.
+
+    HID equivalent: launch the Writer (try `swriter` via runner;
+    fallback `notepad` on Win is in legacy-create-document), then
+    walk through a representative sample of those actions with fixed
+    text. Random selection collapses to a fixed but plausible
+    sequence — daemon-side has no random.choice equivalent.
+  adversary_persona: benign-office-worker
+  duration_estimate_s: 180
+  tags:
+    - benign-human-activity
+    - human-profile
+    - legacy-port
+    - office
+    - writer
+  steps:
+    # Launch LibreOffice/OpenOffice Writer. `swriter` is the modern
+    # binary on both Linux and Windows installs; on bare Win10 with
+    # no LO it'll fail to launch — operator knows their VM image.
+    - { ability: launch-app-via-runner, args: { app_command: "swriter", settle_ms: 4000 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 2000 } }
+
+    # Type a paragraph.
+    - ability: be98ccaa-7bf2-46d0-8731-498028e13591
+      args:
+        text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+        per_char_ms: 50
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1000 } }
+
+    # _write_sentence
+    - ability: be98ccaa-7bf2-46d0-8731-498028e13591
+      args: { text: "The quick brown fox jumps over the lazy dog.", per_char_ms: 50 }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+
+    # _format_text: select up + apply Heading 1 (Ctrl+1)
+    - { ability: chord-keys, args: { keys: [LeftShift, Up], hold_ms: 80 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 500 } }
+    - { ability: chord-keys, args: { keys: [LeftControl, "1"], hold_ms: 80 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 800 } }
+
+    # _find: Ctrl+F, type, Enter, Esc
+    - { ability: chord-keys, args: { keys: [LeftControl, f], hold_ms: 80 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 800 } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "Lorem", per_char_ms: 80 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 800 } }
+    - { ability: press-key, args: { key: Escape } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 500 } }
+
+    # _copy_paste: Ctrl+Home, Shift+End select line, Ctrl+C, Ctrl+End, Ctrl+V
+    - { ability: chord-keys, args: { keys: [LeftControl, Home], hold_ms: 80 } }
+    - { ability: chord-keys, args: { keys: [LeftShift, End], hold_ms: 80 } }
+    - { ability: chord-keys, args: { keys: [LeftControl, c], hold_ms: 80 } }
+    - { ability: chord-keys, args: { keys: [LeftControl, End], hold_ms: 80 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: chord-keys, args: { keys: [LeftControl, v], hold_ms: 80 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1000 } }
+
+    # _save_quit: Ctrl+S, type filename, Enter, Ctrl+Q
+    - { ability: chord-keys, args: { keys: [LeftControl, s], hold_ms: 80 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1500 } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "legacy-writer-doc", per_char_ms: 70 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 2000 } }
+    - { ability: chord-keys, args: { keys: [LeftControl, q], hold_ms: 80 } }

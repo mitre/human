@@ -1,0 +1,49 @@
+---
+
+- id: 13b80ba7-4d51-4a61-a7a3-fbe794dc3297
+  name: Legacy - Create Document
+  description: |
+    HID translation of pyhuman/app/workflows/create_document.py.
+
+    Original: build a Documents/note_<unixtime>.txt path, launch
+    notepad.exe (Windows) or LibreOffice/gedit (Linux/macOS) via
+    subprocess.Popen, type a lorem-ipsum paragraph via pyautogui,
+    Ctrl+S to save, Ctrl+W (Win) or Ctrl+Q (Linux/Mac) to close.
+
+    HID equivalent: launch Notepad via Win+R "notepad", type a fixed
+    lorem paragraph (random text-generation moves to profile-time —
+    see ms-paint atomic notes), Ctrl+S, type filename, Enter, Ctrl+W.
+    Linux/Darwin branches launch soffice via the runner.
+  adversary_persona: benign-office-worker
+  duration_estimate_s: 75
+  tags:
+    - benign-human-activity
+    - human-profile
+    - legacy-port
+    - office
+  steps:
+    # Launch a minimal text editor.
+    - { ability: launch-app-via-runner, args: { app_command: "notepad", settle_ms: 3000 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1500 } }
+
+    # Type a lorem-ish paragraph (fixed at profile-build time;
+    # randomization belongs in the profile generator, not the daemon).
+    - ability: be98ccaa-7bf2-46d0-8731-498028e13591
+      args:
+        text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation."
+        per_char_ms: 60
+
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1500 } }
+
+    # Ctrl+S to save.
+    - { ability: chord-keys, args: { keys: [LeftControl, s], hold_ms: 80 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1200 } }
+
+    # Type a filename and confirm.
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "note_legacy.txt", per_char_ms: 80 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1500 } }
+
+    # Close the editor.
+    - { ability: chord-keys, args: { keys: [LeftControl, w], hold_ms: 80 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 800 } }

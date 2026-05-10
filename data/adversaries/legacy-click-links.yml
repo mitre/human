@@ -1,0 +1,45 @@
+---
+
+- id: 74200f69-4e8a-4b15-853b-89dec15f52db
+  name: Legacy - Click Links
+  description: |
+    HID translation of pyhuman/app/workflows/click_links.py.
+
+    Original: navigate to a random site, sleep 5-15 s, find every
+    `<a>` with an href via selenium, sample 3 at random, navigate to
+    each in sequence.
+
+    HID equivalent: visit the same starting site, dwell-read, then
+    navigate the address bar to a sequence of pre-seeded URLs that
+    plausibly co-exist on the page. Random anchor sampling has no
+    faithful HID analog (no DOM access from the daemon side), so we
+    replace it with deterministic-but-reasonable URLs.
+  adversary_persona: benign-office-worker
+  duration_estimate_s: 75
+  tags:
+    - benign-human-activity
+    - human-profile
+    - legacy-port
+    - browsing
+  steps:
+    - { ability: open-default-browser }
+    - { ability: dwell-natural }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://news.ycombinator.com" } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 3 } }
+    - { ability: dwell-reading }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://news.ycombinator.com/newest" } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 4 } }
+    - { ability: dwell-reading }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://news.ycombinator.com/show" } }
+    - { ability: dwell-reading }
+    - { ability: scroll-page, args: { direction: down, ticks: 3 } }
+    - { ability: dwell-reading }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "https://news.ycombinator.com/ask" } }
+    - { ability: dwell-reading }
+    - { ability: dwell-natural }

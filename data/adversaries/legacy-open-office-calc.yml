@@ -1,0 +1,77 @@
+---
+
+- id: ae2972cd-120d-47ef-b89e-d1b26967d42e
+  name: Legacy - Open Office Calc
+  description: |
+    HID translation of pyhuman/app/workflows/open_office_calc.py.
+
+    Original: launch OpenOffice via os.startfile, press 's' for
+    spreadsheet, F5 + Ctrl+A to navigate to a random cell via the
+    Navigator, fill a header row + data rows with random words and
+    integers via pyautogui, insert a comment with Ctrl+Alt+C, save and
+    quit.
+
+    HID equivalent: launch Calc via runner (`scalc`), navigate by
+    pressing arrow keys (more reliable than the Navigator dialog),
+    type a header row separated by Tab, then a few data rows. Save
+    with Ctrl+S, type filename, Enter, then Ctrl+Q. Random word/int
+    generation lives at profile-build time, not in HID.
+  adversary_persona: analyst
+  duration_estimate_s: 120
+  tags:
+    - benign-human-activity
+    - human-profile
+    - legacy-port
+    - office
+    - calc
+  steps:
+    # Launch LibreOffice/OpenOffice Calc.
+    - { ability: launch-app-via-runner, args: { app_command: "scalc", settle_ms: 4000 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 2000 } }
+
+    # Build a header row. Tab moves to next column.
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "name", per_char_ms: 70 } }
+    - { ability: press-key, args: { key: Tab } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "qty", per_char_ms: 70 } }
+    - { ability: press-key, args: { key: Tab } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "price", per_char_ms: 70 } }
+    - { ability: press-key, args: { key: Tab } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "total", per_char_ms: 70 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 600 } }
+
+    # Data row 1.
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "widget", per_char_ms: 70 } }
+    - { ability: press-key, args: { key: Tab } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "12", per_char_ms: 70 } }
+    - { ability: press-key, args: { key: Tab } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "9.99", per_char_ms: 70 } }
+    - { ability: press-key, args: { key: Tab } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "119.88", per_char_ms: 70 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+
+    # Data row 2.
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "gizmo", per_char_ms: 70 } }
+    - { ability: press-key, args: { key: Tab } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "5", per_char_ms: 70 } }
+    - { ability: press-key, args: { key: Tab } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "24.50", per_char_ms: 70 } }
+    - { ability: press-key, args: { key: Tab } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "122.50", per_char_ms: 70 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1000 } }
+
+    # Insert comment on current cell (Ctrl+Alt+C in LO Calc).
+    - { ability: chord-keys, args: { keys: [LeftControl, LeftAlt, c], hold_ms: 80 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 800 } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "totals look right.", per_char_ms: 70 } }
+    - { ability: press-key, args: { key: Escape } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 800 } }
+
+    # Save and quit.
+    - { ability: chord-keys, args: { keys: [LeftControl, s], hold_ms: 80 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1500 } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "legacy-calc-sheet", per_char_ms: 70 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 2000 } }
+    - { ability: chord-keys, args: { keys: [LeftControl, q], hold_ms: 80 } }
