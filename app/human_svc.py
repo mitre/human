@@ -158,15 +158,20 @@ class HumanService(BaseService):
     async def list_live_workflows(self):
         """Return workflows that the control_server can execute.
 
-        Mixes three sources:
+        Mixes two sources:
           1. HID profile adversaries under data/adversaries/*.yml — these
              carry a `profile_id` so the frontend dispatches them through
              /plugin/human/api/run-profile (the input-daemon SSE pipe).
-          2. Legacy stub shell workflows (idle_browse / office_open /
-             shell_noop) — kept for the pre-HID demo path.
-          3. Anything Caldera's data_svc has loaded as a `workflows`
-             collection from the legacy pyhuman modules.
+          2. Anything Caldera's data_svc has loaded as a `workflows`
+             collection from the legacy pyhuman modules (gracefully empty
+             when HUMAN_LEGACY_PYHUMAN is unset — see
+             ``load_available_workflows``).
         Profiles surface first because they're the new canonical path.
+
+        The three pre-HID stub workflow entries (idle_browse / office_open
+        / shell_noop) that used to be appended here were dropdown noise —
+        they had ``is_hid: False`` and dispatched nowhere — so they were
+        removed in chore/human-efficiency-cleanup.
         """
         live = []
 
@@ -176,20 +181,8 @@ class HumanService(BaseService):
         # too so human.vue's step preview can render without round-tripping.
         live.extend(self._discover_profiles())
 
-        # 2) Legacy stub shell workflows. is_hid is False so the
-        # frontend's "Legacy shell-cradle ability" warning shows for
-        # them — these run via /api/run as a single shell command.
-        live.extend([
-            {'id': 'idle_browse', 'name': 'Idle Browse',
-             'description': 'Open a few benign URLs in a real browser.',
-             'is_hid': False},
-            {'id': 'office_open', 'name': 'Office Open',
-             'description': 'Open and edit a document for N seconds.',
-             'is_hid': False},
-            {'id': 'shell_noop',  'name': 'Shell No-op',
-             'description': 'Run a benign shell command (echo / sleep).',
-             'is_hid': False},
-        ])
+        # 2) Legacy pyhuman workflows loaded into data_svc (opt-in via
+        # HUMAN_LEGACY_PYHUMAN=1). Empty in the default config.
         try:
             legacy = await self.data_svc.locate('workflows')
             for w in legacy:
@@ -308,28 +301,6 @@ class HumanService(BaseService):
                 'hid': hid_out,                  # populated for HID profiles
             })
         return out
-
-    async def dispatch_run(self, body):
-        """Dispatch a workflow/ad-hoc to a host.
-
-        TODO: forward to control_server.py's per-host JSON-RPC channel and
-        stream stdout/stderr back. For now this just echoes so the UI's
-        live-log loop can be exercised end-to-end without the transport.
-        """
-        host_id = body.get('host_id') or '(unset)'
-        workflow = body.get('workflow')
-        args = body.get('args') or ''
-        if workflow:
-            line = f"echo: would run workflow '{workflow}' on {host_id} args={args!r}"
-        else:
-            line = f"echo: would run ad-hoc on {host_id}: {args}"
-        return {
-            'status': 'success',
-            'host_id': host_id,
-            'workflow': workflow,
-            'stdout': line,
-            'stderr': '',
-        }
 
     @staticmethod
     def _normalize_range_host(h):
