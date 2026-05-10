@@ -8,7 +8,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from aiohttp_jinja2 import template, web
+from aiohttp import web
 
 from app.service.auth_svc import for_all_public_methods, check_authorization
 
@@ -94,9 +94,13 @@ class HumanApi:
         self.data_svc = services.get('data_svc')
         self.human_svc = human_svc
 
-    @template('human.html')
     async def splash(self, request):
-        return dict()
+        """Sidebar entrypoint. Serves the Magma SPA's index.html;
+        client-side routing renders the Vue Human UI. Mirrors the
+        same pattern range/onprem uses (range/hook.py:splash). The
+        legacy templates/human.html (alpine.js cradle-builder) was
+        removed when its backing endpoints were deleted."""
+        return web.FileResponse('plugins/magma/dist/index.html')
 
     # --- Timestone live UI routes -------------------------------------------
 
