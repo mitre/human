@@ -1,0 +1,180 @@
+# Per-ability state-graph overlay.
+#
+# Until the legacy-translation agent ships state_requires/state_provides
+# inside the atomic-ability YAMLs themselves, the harness reads this
+# overlay to plan setup chains. Each ability_id (or filename stem) maps
+# to a dict that may contain:
+#
+#   state_requires:  [...]        # what UI state must hold first
+#   state_provides:  [...]        # what UI state holds after success
+#   verify:          [...]        # post-condition checks (same shape
+#                                 #   as the YAML field documented in
+#                                 #   docs/HID_TEST_HARNESS.md)
+#
+# The runtime preference is YAML-first, overlay-fallback — so once the
+# YAMLs land their declarations the matching entry here becomes a
+# no-op.
+#
+# Keep keys in alphabetical order so diffs stay legible.
+
+chord-keys:
+  state_requires: []                # zero-config chord — works anywhere
+  state_provides: []
+  verify:
+    - pixel_change_pct_min: 0       # may not visibly change anything
+
+chord-alt-left:
+  state_requires:
+    - browser-open                  # Alt+Left = browser back-nav
+  state_provides: []
+  verify: []
+
+click-link-random:
+  state_requires:
+    - browser-open
+  state_provides:
+    - browser-shows-target-page
+  verify:
+    - pixel_change_pct_min: 5
+
+close-current-tab:
+  state_requires:
+    - browser-open
+  state_provides: []
+  verify:
+    - pixel_change_pct_min: 1
+
+dwell:
+  state_requires: []                # trivial
+  state_provides: []
+  verify:
+    - pixel_change_pct_max: 5       # nothing should move during a dwell
+
+dwell-natural:
+  state_requires: []
+  state_provides: []
+  verify:
+    - pixel_change_pct_max: 5
+
+dwell-reading:
+  state_requires: []
+  state_provides: []
+  verify:
+    - pixel_change_pct_max: 10      # reading dwells are longer; tolerate cursor blink
+
+focus-address-bar:
+  state_requires:
+    - browser-open
+  state_provides:
+    - browser-address-bar-focused
+    - text-cursor-active
+  verify:
+    - pixel_change_pct_min: 1
+
+focus-address-bar-v2:
+  state_requires:
+    - browser-open
+  state_provides:
+    - browser-address-bar-focused
+    - text-cursor-active
+  verify:
+    - pixel_change_pct_min: 1
+
+focus-page-search:
+  state_requires:
+    - browser-open
+  state_provides:
+    - browser-shows-search-results
+    - text-cursor-active
+  verify:
+    - pixel_change_pct_min: 1
+
+launch-app-via-runner:
+  state_requires: []                # Win+R works from the desktop
+  state_provides:
+    - text-cursor-active            # default app is notepad => cursor in body
+  verify:
+    - pixel_change_pct_min: 5
+
+navigate-to-url:
+  state_requires:
+    - browser-address-bar-focused
+  state_provides:
+    - browser-shows-target-page
+  verify:
+    - pixel_change_pct_min: 5
+
+open-browser-firefox:
+  state_requires: []
+  state_provides:
+    - browser-open
+  verify:
+    - pixel_change_pct_min: 5
+
+open-default-browser:
+  state_requires: []
+  state_provides:
+    - browser-open
+  verify:
+    - pixel_change_pct_min: 5
+
+open-new-tab:
+  state_requires:
+    - browser-open
+  state_provides:
+    - browser-open
+  verify:
+    - pixel_change_pct_min: 1
+
+press-enter:
+  state_requires: []                # works anywhere
+  state_provides: []
+  verify: []
+
+press-key:
+  state_requires: []
+  state_provides: []
+  verify: []
+
+scroll-down:
+  state_requires:
+    - viewport-scrollable
+  state_provides: []
+  verify:
+    - pixel_change_pct_min: 1
+
+scroll-page:
+  state_requires:
+    - viewport-scrollable
+  state_provides: []
+  verify:
+    - pixel_change_pct_min: 1
+
+switch-tab:
+  state_requires:
+    - browser-open
+  state_provides: []
+  verify:
+    - pixel_change_pct_min: 1
+
+type-text:
+  state_requires:
+    - text-cursor-active
+  state_provides: []
+  verify:
+    - pixel_change_pct_min: 1
+
+# --- profiles (composite) --------------------------------------------
+
+surf-the-web:
+  state_requires:
+    - guest-at-desktop
+  state_provides: []
+  verify:
+    - pixel_change_pct_min: 5
+
+server-core-demo:
+  state_requires:
+    - guest-at-cmd-prompt
+  state_provides: []
+  verify: []

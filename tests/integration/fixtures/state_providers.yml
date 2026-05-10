@@ -1,0 +1,60 @@
+# State provider map: state-string -> [ability_id_or_state, ...]
+#
+# The harness's planner reads this to figure out *how* to reach a
+# given state. Entries are tried in order; the first one that exists
+# in the atomic-ability index (or is itself a known state, transitive)
+# wins.
+#
+# Listed providers fall into two flavors:
+#   - ability id / filename stem  (e.g. "open-default-browser")
+#   - another state name          (transitive — "to get X, first get Y")
+#
+# Free-text identifiers — keep them stable across abilities so the
+# graph stays connected. New states are fine; just add an entry here.
+
+# Reached implicitly after VM boot. The planner short-circuits on this
+# state name regardless of the listed providers.
+guest-at-desktop:
+  - launch-via-autologon            # implicit; no YAML needed
+  - login-via-cad-and-password      # explicit chord login (mockup)
+
+# A focused cmd.exe / shell window owns the keyboard.
+guest-at-cmd-prompt:
+  - guest-at-desktop                # transitive prereq
+  - run-cmd-from-run-dialog         # Win+R -> "cmd" -> Enter (mockup)
+
+# Some app has a focused text-input control.
+text-cursor-active:
+  - guest-at-desktop                # transitive — desktop alone is not enough
+  - launch-app-via-runner           # opens notepad by default; cursor is in body
+  - click-into-text-field           # generic (mockup)
+
+# Cursor is positioned over a clickable element.
+mouse-cursor-positioned:
+  - guest-at-desktop                # transitive
+  - move                            # explicit positional move
+
+# Foreground window has scrollable content.
+viewport-scrollable:
+  - browser-open                    # transitive — the simplest scrollable thing
+  - guest-at-desktop
+
+# Default browser is open and painted.
+browser-open:
+  - open-default-browser
+  - open-browser-firefox
+
+# Browser address bar is focused (Ctrl+L was pressed).
+browser-address-bar-focused:
+  - browser-open                    # transitive
+  - focus-address-bar-v2
+  - focus-address-bar
+
+# Browser is on a search-results page.
+browser-shows-search-results:
+  - browser-open                    # transitive
+  - focus-page-search               # in-page search; close enough for now
+
+# Browser navigated to a target page (post-click on a search result).
+browser-shows-target-page:
+  - browser-open                    # transitive
