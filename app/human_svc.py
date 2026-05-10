@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import sys
+import time
 
 from importlib import import_module
 
@@ -16,6 +17,40 @@ from plugins.human.app.c_workflow import Workflow
 from plugins.human.app import human_api as _human_api
 
 _log = logging.getLogger(__name__)
+
+
+# Per-process TTL caches for two hot paths exercised by every Vue
+# refresh of the Human picker:
+#
+#   * _scan_microvm_meta:  glob + json.load on every GET /api/hosts.
+#   * _discover_profiles:  YAML parse on every GET /api/workflows.
+#
+# Both are read-only inventory views: a 3-second staleness window is
+# imperceptible to an operator but eliminates ~99% of the disk work
+# on rapid dropdown refreshes. mtime checks guarantee a write (Range
+# provider writing a new meta.json; operator dropping a new profile
+# YAML) is seen on the very next request.
+#
+# Module-level (not instance-level) so tests can clear via
+# `_scan_meta_cache_clear()` and so the cache survives a single
+# instance throwaway in CI. Threading is fine: aiohttp drives all
+# call sites from the same event loop, no concurrent mutation.
+_META_CACHE_TTL_S = 3.0
+_PROFILE_CACHE_TTL_S = 3.0
+# {(base,): (timestamp, fingerprint, result_list)}
+_META_CACHE: dict = {}
+# {(adv_dir,): (timestamp, fingerprint, result_list)}
+_PROFILE_CACHE: dict = {}
+
+
+def _meta_cache_clear():
+    """Test hook: drop the _scan_microvm_meta TTL cache."""
+    _META_CACHE.clear()
+
+
+def _profile_cache_clear():
+    """Test hook: drop the _discover_profiles TTL cache."""
+    _PROFILE_CACHE.clear()
 
 
 class HumanService(BaseService):
@@ -108,12 +143,37 @@ class HumanService(BaseService):
 
         Malformed / unreadable meta.json files are skipped + logged
         (one bad file should not blank the dropdown).
+
+        TTL cache: results are reused for up to ``_META_CACHE_TTL_S``
+        seconds, but only when the (sorted-path, mtime) fingerprint
+        across every matched meta.json is unchanged. A new microVM
+        being launched (new file) or an existing meta.json being
+        rewritten (mtime bump) invalidates immediately.
         """
         base = getattr(_human_api, 'MICROVM_RUNTIME_BASE',
                        '/tmp/timestone-microvms')
         pattern = os.path.join(base, '*', 'meta.json')
+        paths = sorted(glob.glob(pattern))
+
+        # Build a fingerprint = tuple of (path, mtime_ns). Stat is
+        # much cheaper than open+json.load. If any file vanishes
+        # between glob and stat we treat it as a cache miss.
+        try:
+            fingerprint = tuple((p, os.stat(p).st_mtime_ns) for p in paths)
+        except OSError:
+            fingerprint = None
+
+        now = time.monotonic()
+        cached = _META_CACHE.get((base,))
+        if (cached is not None
+                and fingerprint is not None
+                and cached[1] == fingerprint
+                and (now - cached[0]) < _META_CACHE_TTL_S):
+            # Return a shallow copy so callers can't mutate the cache.
+            return [dict(h) for h in cached[2]]
+
         out = []
-        for meta_path in sorted(glob.glob(pattern)):
+        for meta_path in paths:
             try:
                 with open(meta_path) as f:
                     meta = json.load(f)
@@ -137,6 +197,9 @@ class HumanService(BaseService):
                 'provider': 'microvm',
                 'vnc_ws':   None,
             })
+
+        if fingerprint is not None:
+            _META_CACHE[(base,)] = (now, fingerprint, out)
         return out
 
     async def list_live_workflows(self):
@@ -209,15 +272,41 @@ class HumanService(BaseService):
         steps under that key — even when the YAML keeps them at the
         top level — so the existing v-if logic Just Works without
         having to refactor the picker template.
+
+        TTL cache: reuses results for up to ``_PROFILE_CACHE_TTL_S``
+        seconds when the (filename, mtime) fingerprint across every
+        adversary YAML is unchanged. Dropping a new profile in
+        data/adversaries/ or editing an existing one invalidates the
+        cache on the next request.
         """
-        import yaml
         out = []
         adv_dir = os.path.join(self.human_dir, 'data', 'adversaries')
         if not os.path.isdir(adv_dir):
             return out
-        for name in sorted(os.listdir(adv_dir)):
-            if not name.endswith('.yml'):
-                continue
+
+        # Fingerprint = (filename, mtime_ns) tuple. Cheaper than
+        # yaml.safe_load() per file on every call.
+        yml_names = sorted(n for n in os.listdir(adv_dir)
+                           if n.endswith('.yml'))
+        try:
+            fingerprint = tuple(
+                (n, os.stat(os.path.join(adv_dir, n)).st_mtime_ns)
+                for n in yml_names
+            )
+        except OSError:
+            fingerprint = None
+
+        now = time.monotonic()
+        cached = _PROFILE_CACHE.get((adv_dir,))
+        if (cached is not None
+                and fingerprint is not None
+                and cached[1] == fingerprint
+                and (now - cached[0]) < _PROFILE_CACHE_TTL_S):
+            # Shallow copy so callers can't mutate the cache list.
+            return [dict(p) for p in cached[2]]
+
+        import yaml
+        for name in yml_names:
             path = os.path.join(adv_dir, name)
             try:
                 with open(path) as f:
@@ -284,6 +373,9 @@ class HumanService(BaseService):
                 'is_hid': is_hid,                # frontend gates legacy warning
                 'hid': hid_out,                  # populated for HID profiles
             })
+
+        if fingerprint is not None:
+            _PROFILE_CACHE[(adv_dir,)] = (now, fingerprint, out)
         return out
 
     @staticmethod
