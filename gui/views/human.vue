@@ -379,7 +379,7 @@
               <ol class="step-list">
                 <li v-for="(s, i) in selectedAbilitySteps" :key="i" class="step-row">
                   <span class="step-idx has-text-grey">{{ i + 1 }}</span>
-                  <span class="step-action tag is-dark is-small">{{ s.action }}</span>
+                  <span class="step-action tag is-dark is-small">{{ stepLabel(s) }}</span>
                   <span class="step-detail">{{ stepDetail(s) }}</span>
                 </li>
               </ol>
@@ -620,9 +620,32 @@ const selectedIsLegacy = computed(() => {
 // Until then it stays null so the viewer header just shows the static label.
 const currentStepIdx = ref(null)
 
+// Short label for the action pill on the left of each step row. Materialized
+// OperatorMessages have `action`; YAML-reference shape (composite profiles
+// like Surf the Web) has `ability` (a UUID) instead. For the latter we show
+// `ability` so the operator at least sees the row isn't empty.
+function stepLabel(step) {
+  if (step.action) return step.action
+  if (step.ability) return 'ability'
+  return '?'
+}
+
 // Pretty one-line description of a step row, for the preview list. We keep
 // this short enough that 10-30 steps fit in the visible panel without scroll.
 function stepDetail(step) {
+  // YAML reference shape: {ability: <uuid>, args: {...}} — render args summary.
+  if (step.ability && !step.action) {
+    const args = step.args || {}
+    const keys = Object.keys(args)
+    if (!keys.length) return step.ability.slice(0, 8) + '…'
+    return keys
+      .map(k => {
+        const v = args[k]
+        const sv = typeof v === 'string' ? v.slice(0, 24) : JSON.stringify(v)
+        return `${k}=${sv}`
+      })
+      .join(' ')
+  }
   switch (step.action) {
     case 'move': {
       const t = step.target || {}
@@ -1371,10 +1394,18 @@ onMounted(async () => {
   text-align: right;
 }
 .step-detail {
-  color: #939393;
+  color: #c8c8c8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Action pill text. Same root cause as the collapse chevron: Caldera's
+   --caldera-fg variable resolves to a dark colour in this theme, so
+   Bulma's .tag.is-dark default white-on-dark loses to a global rule
+   and the pill renders as dark-on-dark (looks blank). Force #fff. */
+.step-action.tag.is-dark {
+  color: #fff !important;
 }
 
 /* Inline post-run MP4 player. Compact since the live framebuffer is the
