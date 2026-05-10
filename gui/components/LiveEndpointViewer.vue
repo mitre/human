@@ -162,8 +162,17 @@ const screen = ref(null)
 const collapsed = ref(false)
 watch(collapsed, (v) => emit('update:collapsed', v))
 
-const MAX_RETRIES = 5
-const RETRY_DELAY_MS = 2000
+// Stage 3 (connection-recovery-hardening): widen the retry budget and
+// switch to an exponential backoff that pairs with the WS proxy's
+// backend-reconnect logic (range_vnc_proxy.py _RECONNECT_BACKOFFS_S)
+// and the daemon supervisor (onprem_microvm_provider DaemonSupervisor).
+//
+// Backoff schedule (ms): 500, 1000, 2000, 4000, 8000, 8000, 8000, 8000.
+// Total worst-case retry window ~39.5s — long enough to ride out a
+// daemon respawn + CH UDS rebind + browser hand-off without giving up,
+// but bounded so a truly-dead VM still surfaces a "failed" state.
+const MAX_RETRIES = 8
+const RETRY_BACKOFFS_MS = [500, 1000, 2000, 4000, 8000, 8000, 8000, 8000]
 
 let rfb = null
 let retryTimer = null
@@ -173,7 +182,13 @@ const retriesExhausted = computed(() => retryAttempt.value >= MAX_RETRIES)
 
 const statusLabel = computed(() => {
   switch (state.value) {
-    case 'connecting':   return 'connecting'
+    case 'connecting':
+      // Distinguish first connect ("connecting") from the post-disconnect
+      // retry path ("reconnecting (N/8)") so the operator can see we're
+      // actively trying to recover instead of stuck.
+      return retryAttempt.value > 0
+        ? `reconnecting (${retryAttempt.value}/${MAX_RETRIES})`
+        : 'connecting'
     case 'connected':    return 'connected'
     case 'disconnected': return retriesExhausted.value ? 'disconnected' : 'reconnecting'
     case 'failed':       return 'failed'
@@ -289,7 +304,15 @@ function onRfbDisconnect(ev) {
     state.value = 'idle'
     return
   }
-  state.value = 'disconnected'
+  // Stage 3: stay in 'connecting' (warning tag, spinner) instead of
+  // flipping to 'disconnected' (red error overlay) while we have
+  // retries left. The operator should see "we're working on it",
+  // not "everything's broken", until we actually exhaust the budget.
+  if (retryAttempt.value < MAX_RETRIES) {
+    state.value = 'connecting'
+  } else {
+    state.value = 'disconnected'
+  }
   errorMessage.value = clean
     ? 'VNC disconnected.'
     : 'VNC disconnected unexpectedly.'
@@ -305,14 +328,20 @@ function onRfbSecurityFailure(ev) {
 function scheduleRetry() {
   if (cancelled) return
   if (retryAttempt.value >= MAX_RETRIES) {
+    state.value = 'disconnected'  // committed-give-up
     errorMessage.value = `VNC disconnected — gave up after ${MAX_RETRIES} retries.`
     return
   }
+  // Index into the backoff table BEFORE we increment retryAttempt so
+  // the very first retry uses backoffs[0] (= 500ms), not backoffs[1].
+  const delay = RETRY_BACKOFFS_MS[
+    Math.min(retryAttempt.value, RETRY_BACKOFFS_MS.length - 1)
+  ]
   retryAttempt.value += 1
   retryTimer = setTimeout(() => {
     retryTimer = null
     if (!cancelled) connect()
-  }, RETRY_DELAY_MS)
+  }, delay)
 }
 
 function manualReconnect() {
@@ -356,7 +385,7 @@ watch(
 
 onBeforeUnmount(teardown)
 
-defineExpose({ vncWsUrl, MAX_RETRIES, RETRY_DELAY_MS })
+defineExpose({ vncWsUrl, MAX_RETRIES, RETRY_BACKOFFS_MS })
 </script>
 
 <style scoped>
