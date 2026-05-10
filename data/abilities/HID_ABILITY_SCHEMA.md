@@ -235,7 +235,7 @@ Materialized for `os=windows`:
 {"action": "press", "key": "Enter"}
 {"action": "wait_for", "ms": 2500}
 {"action": "dwell", "ms": 2326}            // dwell-natural, RNG-picked
-{"action": "chord", "keys": ["LeftControl", "l"], "hold_ms": 50}
+{"action": "chord", "keys": ["LeftCtrl", "l"], "hold_ms": 50}
 {"action": "dwell", "ms": 150}
 {"action": "type", "text": "https://news.ycombinator.com", "per_char_ms": 110}
 ...
