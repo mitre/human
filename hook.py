@@ -37,6 +37,11 @@ async def enable(services):
     app.router.add_route('GET',  '/plugin/human/api/workflows', human_api.api_workflows)
     app.router.add_route('POST', '/plugin/human/api/run',       human_api.api_run)
 
+    # Chord-palette dispatcher (overnight-stabilization 2026-05-10).
+    # Body: {host_id, keys: [...], hold_ms?}. Backend for the
+    # tier-1/tier-2/tier-3 chord buttons in human.vue.
+    app.router.add_route('POST', '/plugin/human/api/chord',     human_api.api_chord)
+
     # Phase C: profile -> input-daemon dispatch. SSE-streamed; supports
     # both POST (JSON body) and GET (query string, friendly to the
     # browser's EventSource API which is GET-only).

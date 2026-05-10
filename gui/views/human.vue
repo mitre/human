@@ -165,6 +165,150 @@
         </LiveEndpointViewer>
       </section>
 
+      <!-- ROW 2.5: CHORD PALETTE =========================================
+           Tier 1 (always visible): SAS + nav keys.
+           Tier 2 (OS-aware):       Windows/Linux power-user shortcuts.
+           Tier 3 (always visible): cancel / clear / refresh.
+           Tier 4 (collapsible):    function keys, arrows, sticky modifiers.
+
+           Each click POSTs to /plugin/human/api/chord with
+             {host_id, keys: [...], hold_ms: 50}
+           Sticky modifiers (Tier 4) layer their key names in front of
+           the next chip's key. -->
+      <section v-if="selectedHost" class="row-chord-palette">
+        <div class="chord-header is-flex is-align-items-center">
+          <h4 class="title is-6 mb-0 mr-3">Keyboard chords</h4>
+          <span class="has-text-grey is-size-7 mr-3">
+            target: <code>{{ selectedHost.name || selectedHost.id }}</code>
+          </span>
+          <button
+            class="button is-dark is-small ml-auto"
+            @click="chordTier4Open = !chordTier4Open"
+            :title="chordTier4Open ? 'Hide F-keys / arrows / modifiers' : 'Show F-keys / arrows / modifiers'"
+          >
+            <span class="icon is-small"><i class="fas" :class="chordTier4Open ? 'fa-chevron-up' : 'fa-chevron-down'"></i></span>
+            <span>{{ chordTier4Open ? 'Less' : 'More' }}</span>
+          </button>
+        </div>
+        <div v-if="chordStatus" class="chord-status is-size-7 mb-1" :class="chordStatusClass">
+          {{ chordStatus }}
+        </div>
+
+        <!-- Tier 1: always visible -->
+        <div class="chord-row">
+          <button class="button is-small is-warning chord-chip"
+                  @click="sendChord(['LeftCtrl','LeftAlt','Delete'])"
+                  title="Ctrl+Alt+Del — Secure Attention Sequence (login screen unlocks)">
+            Ctrl+Alt+Del
+          </button>
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['Enter'])" title="Enter">Enter</button>
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['Escape'])" title="Escape">Esc</button>
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['Tab'])" title="Tab">Tab</button>
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['Backspace'])" title="Backspace">Backspace</button>
+        </div>
+
+        <!-- Tier 2: OS-aware. -->
+        <div class="chord-row" v-if="chordOs === 'windows'">
+          <span class="chord-row-label">Windows</span>
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['LeftMeta','R'])"
+                  title="Win+R — Run dialog">Win+R</button>
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['LeftMeta','L'])"
+                  title="Win+L — Lock workstation">Win+L</button>
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['LeftMeta','D'])"
+                  title="Win+D — Show desktop">Win+D</button>
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['LeftAlt','Tab'])"
+                  title="Alt+Tab — Cycle windows">Alt+Tab</button>
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['LeftAlt','F4'])"
+                  title="Alt+F4 — Close window">Alt+F4</button>
+        </div>
+        <div class="chord-row" v-else-if="chordOs === 'linux'">
+          <span class="chord-row-label">Linux</span>
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['LeftCtrl','LeftAlt','F1'])"
+                  title="Ctrl+Alt+F1 — TTY1">Ctrl+Alt+F1</button>
+          <button v-for="n in [2,3,4,5,6]" :key="n"
+                  class="button is-small chord-chip"
+                  @click="sendChord(['LeftCtrl','LeftAlt','F'+n])"
+                  :title="'Ctrl+Alt+F'+n+' — TTY'+n">F{{n}}</button>
+        </div>
+
+        <!-- Tier 3: always visible. -->
+        <div class="chord-row">
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['LeftCtrl','C'])"
+                  title="Ctrl+C — Interrupt / copy">Ctrl+C</button>
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['LeftCtrl','L'])"
+                  title="Ctrl+L — Clear screen / address bar">Ctrl+L</button>
+          <button class="button is-small chord-chip"
+                  @click="sendChord(['F5'])" title="F5 — Refresh">F5</button>
+        </div>
+
+        <!-- Tier 4: collapsible (F-keys, arrows, nav, sticky modifiers). -->
+        <div v-if="chordTier4Open" class="chord-tier4">
+          <div class="chord-row">
+            <span class="chord-row-label">Function</span>
+            <button v-for="n in 12" :key="'f'+n"
+                    class="button is-small chord-chip"
+                    @click="sendChord(['F'+n])"
+                    :title="'F'+n">F{{n}}</button>
+          </div>
+          <div class="chord-row">
+            <span class="chord-row-label">Arrows</span>
+            <button class="button is-small chord-chip"
+                    @click="sendChord(['Up'])" title="Up">↑</button>
+            <button class="button is-small chord-chip"
+                    @click="sendChord(['Down'])" title="Down">↓</button>
+            <button class="button is-small chord-chip"
+                    @click="sendChord(['Left'])" title="Left">←</button>
+            <button class="button is-small chord-chip"
+                    @click="sendChord(['Right'])" title="Right">→</button>
+          </div>
+          <div class="chord-row">
+            <span class="chord-row-label">Nav</span>
+            <button class="button is-small chord-chip"
+                    @click="sendChord(['Home'])" title="Home">Home</button>
+            <button class="button is-small chord-chip"
+                    @click="sendChord(['End'])" title="End">End</button>
+            <button class="button is-small chord-chip"
+                    @click="sendChord(['PageUp'])" title="PageUp">PgUp</button>
+            <button class="button is-small chord-chip"
+                    @click="sendChord(['PageDown'])" title="PageDown">PgDn</button>
+            <button class="button is-small chord-chip"
+                    @click="sendChord(['Insert'])" title="Insert">Ins</button>
+            <button class="button is-small chord-chip"
+                    @click="sendChord(['Delete'])" title="Delete">Del</button>
+          </div>
+          <div class="chord-row">
+            <span class="chord-row-label">Sticky</span>
+            <button class="button is-small chord-chip"
+                    :class="{ 'is-info': chordStickyMods.includes('LeftCtrl') }"
+                    @click="toggleStickyMod('LeftCtrl')" title="Sticky Ctrl">Ctrl</button>
+            <button class="button is-small chord-chip"
+                    :class="{ 'is-info': chordStickyMods.includes('LeftAlt') }"
+                    @click="toggleStickyMod('LeftAlt')" title="Sticky Alt">Alt</button>
+            <button class="button is-small chord-chip"
+                    :class="{ 'is-info': chordStickyMods.includes('LeftShift') }"
+                    @click="toggleStickyMod('LeftShift')" title="Sticky Shift">Shift</button>
+            <button class="button is-small chord-chip"
+                    :class="{ 'is-info': chordStickyMods.includes('LeftMeta') }"
+                    @click="toggleStickyMod('LeftMeta')" title="Sticky Win/Super">Win</button>
+            <span class="has-text-grey is-size-7 ml-2" v-if="chordStickyMods.length">
+              + next chip
+            </span>
+          </div>
+        </div>
+      </section>
+
       <!-- ROW 3: COMMAND STREAM (ability / args / record / output) ======
            Split into three sub-columns inside one row so the operator can
            see the picker, the args/run controls, and the live output log
@@ -281,7 +425,7 @@
             </div>
 
             <div class="field">
-              <label class="label is-small">Ad-hoc command</label>
+              <label class="label is-small">Manual command</label>
               <div class="field has-addons">
                 <div class="control is-expanded">
                   <input
@@ -293,7 +437,7 @@
                   />
                 </div>
                 <div class="control">
-                  <button class="button is-dark is-small" @click="runAdhoc" :disabled="!adhocInput.trim()">
+                  <button class="button is-primary is-small" @click="runAdhoc" :disabled="!adhocInput.trim()">
                     Send
                   </button>
                 </div>
@@ -376,6 +520,18 @@ const profileDropdownOpen = ref(false)
 // reflow when the section is collapsed (giving the freed vertical
 // space to the command stream below). Session-only.
 const viewerCollapsed = ref(false)
+
+// ---- Chord palette state (overnight-stabilization 2026-05-10) -----------
+// Tier 4 (function/arrows/nav/sticky-mods) defaults closed so the
+// initial Tier1+2+3 view fits in one row-strip. chordStickyMods holds
+// modifier names (LeftCtrl, LeftAlt, LeftShift, LeftMeta) that will
+// be prepended to the next chord chip's keys, then auto-cleared.
+// chordStatus is a one-line "sent" / "failed" message reset by the
+// next click.
+const chordTier4Open = ref(false)
+const chordStickyMods = ref([])     // ['LeftCtrl', 'LeftAlt', ...]
+const chordStatus = ref('')
+const chordStatusOk = ref(true)
 
 // Record-this-run toggle: wired into runProfileSse so the SSE handler
 // can spawn an RfbRecorder against the GPU daemon. Set per-host via
@@ -783,6 +939,63 @@ async function runAdhoc() {
   }
 }
 
+// ---- Chord palette --------------------------------------------------------
+// `chordOs` drives the Tier 2 row's OS-specific chip set. Defaults to
+// 'windows' if the host record carries no `os` field — both VMs in the
+// current Range deploy are Windows; Linux support exists for future
+// fixtures. Computed (not a stored ref) so it stays in sync with host
+// switches.
+const chordOs = computed(() => {
+  const h = selectedHost.value
+  const raw = String(h?.os || '').toLowerCase().trim()
+  if (raw.startsWith('linux')) return 'linux'
+  if (raw.startsWith('darwin') || raw.startsWith('mac')) return 'darwin'
+  // 'windows' / '' / anything else falls through to the Windows row;
+  // those VMs are the dominant case for the live UI.
+  return 'windows'
+})
+
+const chordStatusClass = computed(() => ({
+  'has-text-success': chordStatus.value && chordStatusOk.value,
+  'has-text-danger':  chordStatus.value && !chordStatusOk.value,
+}))
+
+function toggleStickyMod(mod) {
+  const i = chordStickyMods.value.indexOf(mod)
+  if (i >= 0) chordStickyMods.value.splice(i, 1)
+  else chordStickyMods.value.push(mod)
+}
+
+async function sendChord(keys) {
+  if (!selectedHostId.value) return
+  // Sticky modifiers prepend to the chip's own key list. We auto-clear
+  // sticky state after the chord fires so the next chip is "clean"
+  // unless the operator deliberately re-arms.
+  const sticky = chordStickyMods.value.slice()
+  const fullKeys = sticky.length ? [...sticky, ...keys] : keys
+  chordStatus.value = ''
+  appendLog(selectedHostId.value, 'stdin', `[chord] ${fullKeys.join('+')}`)
+  try {
+    const res = await $api.post('/plugin/human/api/chord', {
+      host_id: selectedHostId.value,
+      keys: fullKeys,
+      hold_ms: 50,
+    })
+    chordStatus.value = `sent ${fullKeys.join('+')}`
+    chordStatusOk.value = true
+    if (res?.data?.kbd_socket === 'tablet-fallback') {
+      chordStatus.value += ' (tablet-fallback — KEY_* may be dropped)'
+      chordStatusOk.value = false
+    }
+  } catch (err) {
+    chordStatus.value = `chord failed: ${err.response?.data?.stderr || err.message || err}`
+    chordStatusOk.value = false
+    appendLog(selectedHostId.value, 'stderr', chordStatus.value)
+  }
+  // Auto-clear sticky modifiers after the chord fires.
+  if (sticky.length) chordStickyMods.value = []
+}
+
 function handleRunResponse(host_id, data) {
   if (!data) {
     appendLog(host_id, 'stdout', '(no response body)')
@@ -970,6 +1183,59 @@ onMounted(async () => {
 .row-viewer > :deep(.live-endpoint) {
   height: 100%;
   min-height: 0;
+}
+
+/* ---------------- Row 2.5: chord palette ---------------------- */
+/* Lives between the Live Endpoint viewer (row 2) and the Command
+   stream (row 3). Tier rows are flex-wrap'd so a narrow page lays the
+   chips out across multiple lines instead of forcing a horizontal
+   scrollbar. The Tier 4 collapsible holds F-keys, arrows, nav, and
+   sticky modifiers; default-closed so the strip stays compact. */
+.row-chord-palette {
+  background-color: #272727;
+  border: 1px solid #939393;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.row-chord-palette .chord-header {
+  margin-bottom: 0.1rem;
+}
+.row-chord-palette .chord-status {
+  margin: 0;
+  min-height: 1.1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.row-chord-palette .chord-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.row-chord-palette .chord-row-label {
+  color: #b8b8b8;
+  font-size: 0.72rem;
+  width: 4.5rem;
+  flex: 0 0 auto;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.row-chord-palette .chord-chip {
+  padding-left: 0.55rem;
+  padding-right: 0.55rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  border-radius: 4px;
+}
+.row-chord-palette .chord-tier4 {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.25rem;
+  border-top: 1px dashed #555;
 }
 
 /* ---------------- Row 3: command stream ----------------------- */
