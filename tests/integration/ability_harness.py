@@ -254,13 +254,41 @@ def load_state_dependencies() -> dict[str, dict]:
     return data
 
 
+def _overlay_entry(ability_id: str, ability: dict | None,
+                   overlay: dict[str, dict]) -> dict:
+    """Return the overlay entry for ``ability_id``.
+
+    The atomic-ability index is double-keyed (uuid AND filename stem)
+    by ``load_atomic_index``, but the overlay file keys by stem only.
+    When a caller passes a uuid, look for an overlay entry that
+    matches either the uuid OR the ability's `name` lowercased+slugified
+    OR — most useful — any other key in the ambient atomic index that
+    points to the same dict.
+    """
+    o = overlay.get(ability_id)
+    if isinstance(o, dict):
+        return o
+    if ability is not None:
+        # Try filename-stem lookups: walk the loaded index and find
+        # all keys that resolve to this same ability dict.
+        idx = load_atomic_index()
+        for k, v in idx.items():
+            if v is ability or (isinstance(v, dict) and v.get("id")
+                                == ability.get("id")):
+                if k != ability_id:
+                    o = overlay.get(k)
+                    if isinstance(o, dict):
+                        return o
+    return {}
+
+
 def ability_state_requires(ability_id: str, ability: dict | None,
                            overlay: dict[str, dict]) -> list[str]:
     """Return state_requires for ``ability_id`` — YAML field first,
     overlay fallback. Empty list = no setup needed."""
     if ability and isinstance(ability.get("state_requires"), list):
         return [str(s) for s in ability["state_requires"]]
-    o = overlay.get(ability_id) or {}
+    o = _overlay_entry(ability_id, ability, overlay)
     if isinstance(o.get("state_requires"), list):
         return [str(s) for s in o["state_requires"]]
     return []
@@ -270,7 +298,7 @@ def ability_state_provides(ability_id: str, ability: dict | None,
                            overlay: dict[str, dict]) -> list[str]:
     if ability and isinstance(ability.get("state_provides"), list):
         return [str(s) for s in ability["state_provides"]]
-    o = overlay.get(ability_id) or {}
+    o = _overlay_entry(ability_id, ability, overlay)
     if isinstance(o.get("state_provides"), list):
         return [str(s) for s in o["state_provides"]]
     return []
@@ -280,7 +308,7 @@ def ability_verify(ability_id: str, ability: dict | None,
                    overlay: dict[str, dict]) -> list[dict]:
     if ability and isinstance(ability.get("verify"), list):
         return list(ability["verify"])
-    o = overlay.get(ability_id) or {}
+    o = _overlay_entry(ability_id, ability, overlay)
     if isinstance(o.get("verify"), list):
         return list(o["verify"])
     return []
