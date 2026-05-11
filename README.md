@@ -4,6 +4,13 @@ Plugin supplying Caldera with human-emulation capabilities. Runs in two
 modes — **standalone** (legacy, in-guest agent) or **paired with the
 Range plugin** (HID stack, host-side drive over virtio-input).
 
+## Recent changes
+
+- Stub `microvm-1` / `microvm-2` hosts removed. The API now returns
+  `{profile: "(no range)", hosts: []}` when no
+  `/tmp/timestone-microvms/*/meta.json` is present, and the UI renders
+  a clean empty state instead of fictitious endpoints.
+
 ## Two operating modes
 
 ### A. Standalone (in-guest agent)
