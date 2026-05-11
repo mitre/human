@@ -68,6 +68,29 @@ def _parse_bool(value) -> bool:
         return value.strip().lower() in ('1', 'true', 'yes', 'on')
     return False
 
+
+def _parse_int_or_none(value) -> int | None:
+    """Coerce query-string / JSON tempo slider values to int. Returns
+    None for missing / empty / unparseable input — caller treats
+    None as "use the daemon default for this field"."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None  # treat bool as missing — would mask a real int
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return None
+        try:
+            return int(float(s))
+        except ValueError:
+            return None
+    return None
+
 # Canonical microVM runtime base. Mirrors the Range provider constant
 # (plugins/range/app/cdktf/providers/onprem_microvm_provider.py:83
 #  DEFAULT_CARRIER_RUNTIME_BASE = "/tmp/timestone-microvms").
@@ -426,12 +449,17 @@ class HumanApi:
         """
         # Accept GET (query string, easy for EventSource) or POST (body).
         os_override = None
+        tempo_wpm: int | None = None
+        tempo_jitter_pct: int | None = None
         if request.method == 'GET':
             host_id = request.query.get('host_id')
             profile_id = request.query.get('profile_id')
             args_raw = request.query.get('args')
             record = _parse_bool(request.query.get('record'))
             os_override = request.query.get('os')
+            tempo_wpm = _parse_int_or_none(request.query.get('tempo_wpm'))
+            tempo_jitter_pct = _parse_int_or_none(
+                request.query.get('tempo_jitter_pct'))
             try:
                 call_args = json.loads(args_raw) if args_raw else {}
             except Exception:
@@ -450,6 +478,8 @@ class HumanApi:
             call_args = body.get('args') or {}
             record = _parse_bool(body.get('record'))
             os_override = body.get('os')
+            tempo_wpm = _parse_int_or_none(body.get('tempo_wpm'))
+            tempo_jitter_pct = _parse_int_or_none(body.get('tempo_jitter_pct'))
 
         if not host_id or not profile_id:
             return web.json_response(
@@ -535,6 +565,30 @@ class HumanApi:
         # for vanilla profile invocations; left as a hook for future
         # operator overrides.)
         _ = call_args  # reserved for future use
+
+        # Per-run typing-tempo overrides. The Vue UI exposes WPM + jitter
+        # sliders; when set, we override the materialized `type` action's
+        # per_char_ms / jitter_pct so the operator can dial tempo without
+        # editing the profile YAML. Profile-level args (per_char_ms set
+        # in the YAML) win against tempo_wpm — operators wanting per-step
+        # control can still set it in YAML and the override here is a
+        # no-op when the materializer's output already matches.
+        if tempo_wpm is not None or tempo_jitter_pct is not None:
+            # WPM → ms/char: 60_000 ms/min ÷ (WPM × 5 chars/word).
+            # Clamp to [30, 1000] so a slider extreme can't pile up
+            # multi-second delays per char.
+            override_per_char_ms = None
+            if tempo_wpm is not None and tempo_wpm > 0:
+                override_per_char_ms = max(30, min(1000, 12000 // tempo_wpm))
+            override_jitter_pct = None
+            if tempo_jitter_pct is not None:
+                override_jitter_pct = max(0, min(80, tempo_jitter_pct))
+            for msg in messages:
+                if isinstance(msg, dict) and msg.get('action') == 'type':
+                    if override_per_char_ms is not None:
+                        msg['per_char_ms'] = override_per_char_ms
+                    if override_jitter_pct is not None:
+                        msg['jitter_pct'] = override_jitter_pct
 
         # Open SSE response.
         resp = web.StreamResponse(

@@ -413,6 +413,47 @@
               </label>
             </div>
 
+            <!-- Typing tempo sliders. Default values mirror the daemon's
+                 defaults (48 WPM ≈ 250 ms/char, 40% jitter). When either
+                 slider moves off its default, runProfileSse appends the
+                 query param and the backend overrides every materialized
+                 `type` action's per_char_ms / jitter_pct accordingly. -->
+            <div class="field tempo-controls">
+              <label class="label is-small">Typing tempo</label>
+              <div class="control tempo-row">
+                <span class="tempo-label">WPM</span>
+                <input
+                  class="tempo-slider"
+                  type="range"
+                  min="20"
+                  max="150"
+                  step="1"
+                  v-model.number="tempoWpm"
+                  :title="`per-char ≈ ${Math.round(12000 / tempoWpm)}ms`"
+                />
+                <span class="tempo-value">{{ tempoWpm }}</span>
+              </div>
+              <div class="control tempo-row">
+                <span class="tempo-label">Jitter %</span>
+                <input
+                  class="tempo-slider"
+                  type="range"
+                  min="0"
+                  max="80"
+                  step="1"
+                  v-model.number="tempoJitterPct"
+                  :title="`±${tempoJitterPct}% of per-char-ms`"
+                />
+                <span class="tempo-value">{{ tempoJitterPct }}</span>
+              </div>
+              <p
+                v-if="tempoWpm !== 48 || tempoJitterPct !== 40"
+                class="is-size-7 has-text-grey"
+              >
+                overrides daemon defaults (48 WPM, 40% jitter) for this run
+              </p>
+            </div>
+
             <div v-if="recordingUrl" class="recording-panel">
               <h4 class="title is-6 mb-1">Recording</h4>
               <video controls :src="recordingUrl" class="recording-video"></video>
@@ -537,6 +578,22 @@ const chordStatusOk = ref(true)
 // can spawn an RfbRecorder against the GPU daemon. Set per-host via
 // the checkbox next to the Run button.
 const record = ref(false)
+
+// Per-run typing-tempo overrides. Sliders in the command row let the
+// operator tune WPM + jitter without editing the profile YAML. Sent as
+// query params on /api/run-profile only when they differ from the
+// defaults (matches the daemon defaults — 48 WPM ≈ 250 ms/char, 40%
+// jitter). The backend reads tempo_wpm + tempo_jitter_pct and rewrites
+// per_char_ms / jitter_pct on every materialized `type` action before
+// dispatch. Profile YAMLs with per-step overrides aren't double-
+// overridden — the materialize output's existing values reflect what
+// the YAML asked for AND get re-stamped here. (If you need to keep a
+// YAML's per-step tempo immune to the slider, document it in the
+// profile.)
+const TEMPO_WPM_DEFAULT = 48
+const TEMPO_JITTER_DEFAULT = 40
+const tempoWpm = ref(TEMPO_WPM_DEFAULT)
+const tempoJitterPct = ref(TEMPO_JITTER_DEFAULT)
 // Filled in by the SSE `recording_ready` event after a recorded run.
 const recordingUrl = ref(null)
 const recordingPath = ref(null)
@@ -851,10 +908,17 @@ async function runAssignedWorkflow() {
 // SSE consumer in browsers; the streaming endpoint mirrors the messages
 // one-for-one into the operator UDS server-side.
 function runProfileSse(host_id, profile_id, assignment) {
+  // Typing-tempo overrides: when the sliders are touched, send them.
+  // Defaults match the daemon's defaults so the URL stays compact for
+  // vanilla runs (omitted params → daemon defaults apply).
+  const tempoQuery =
+    (tempoWpm.value !== TEMPO_WPM_DEFAULT ? `&tempo_wpm=${tempoWpm.value}` : '')
+    + (tempoJitterPct.value !== TEMPO_JITTER_DEFAULT ? `&tempo_jitter_pct=${tempoJitterPct.value}` : '')
   const url = `/plugin/human/api/run-profile`
     + `?host_id=${encodeURIComponent(host_id)}`
     + `&profile_id=${encodeURIComponent(profile_id)}`
     + `&record=${record.value ? 'true' : 'false'}`
+    + tempoQuery
   appendLog(host_id, 'stdin',
             `[profile] ${profile_id} -> input-daemon (host=${host_id}, `
             + `record=${record.value})`)
@@ -1296,6 +1360,33 @@ onMounted(async () => {
   gap: 0.5rem;
   padding-top: 0.75rem;
   justify-content: flex-start;
+}
+
+/* Typing-tempo sliders. Compact two-row layout that fits inside the
+   col-2 command pane without crowding the Manual command field. */
+.tempo-controls {
+  margin-top: 0.25rem;
+}
+.tempo-row {
+  display: grid;
+  grid-template-columns: 4rem 1fr 2.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+.tempo-label {
+  font-size: 0.78em;
+  color: #c8c8c8;
+}
+.tempo-slider {
+  width: 100%;
+  cursor: pointer;
+}
+.tempo-value {
+  font-size: 0.78em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: #fff;
 }
 
 .cmd-col {
