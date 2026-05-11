@@ -529,7 +529,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, inject } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, inject } from 'vue'
 import LiveEndpointViewer from '../components/LiveEndpointViewer.vue'
 import RecordingsBrowser from '../components/RecordingsBrowser.vue'
 
@@ -1101,11 +1101,26 @@ function handleRunResponse(host_id, data) {
 }
 
 // ---- Lifecycle -----------------------------------------------------------
+let _profilesPollHandle = null
 onMounted(async () => {
   // Refresh hosts/workflows first so rangeProfileName is populated;
   // loadProfiles can then prefer that over the localStorage fallback.
   await refreshAll()
   await loadProfiles()
+  // Live-refresh the profile dropdown every 10 s so profiles created
+  // / torn down by other workflows (e.g. cti_pipeline_deploy_range,
+  // the operator deleting a profile, the e2e script reaping a stale
+  // mcp-* entry) appear / disappear without a page reload.
+  _profilesPollHandle = setInterval(() => {
+    if (document.hidden) return
+    loadProfiles().catch(() => {})
+  }, 10000)
+})
+onUnmounted(() => {
+  if (_profilesPollHandle) {
+    clearInterval(_profilesPollHandle)
+    _profilesPollHandle = null
+  }
 })
 </script>
 
