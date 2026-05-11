@@ -121,17 +121,13 @@ class HumanService(BaseService):
         if hosts:
             return {'profile': '(active range)', 'hosts': hosts}
 
-        # 3. No microVMs running — return stubs so the dropdown is
-        # populated on a fresh dev box (preserves pre-G6a behavior).
-        return {
-            'profile': '(stub)',
-            'hosts': [
-                {'id': 'host-stub-1', 'name': 'microvm-1', 'ip': '10.0.0.11',
-                 'status': 'unknown', 'vnc_ws': None},
-                {'id': 'host-stub-2', 'name': 'microvm-2', 'ip': '10.0.0.12',
-                 'status': 'unknown', 'vnc_ws': None},
-            ],
-        }
+        # 3. No microVMs running — return an empty list so the UI shows
+        # a clean empty state instead of fake hosts. Earlier behavior
+        # returned two stub entries (microvm-1 10.0.0.11, microvm-2
+        # 10.0.0.12) to populate the dropdown on a fresh dev box, but
+        # that masked real "no range deployed yet" status and confused
+        # users who tried to click the stubs.
+        return {'profile': '(no range)', 'hosts': []}
 
     @staticmethod
     def _scan_microvm_meta():
@@ -188,14 +184,35 @@ class HumanService(BaseService):
                              'fields (vm_name=%r, ip=%r)',
                              meta_path, vm_name, ip)
                 continue
+            # Surface a vnc_ws URL when meta.json declares a GPU daemon
+            # with a bound RFB port. The Range plugin's WS proxy
+            # (plugins/range/app/range_vnc_proxy.py) mounts the
+            # forwarder at /plugin/range/api/vnc/<vm_name>/ws and
+            # resolves the backing port from this same meta.json on
+            # every WS upgrade, so handing out the URL whenever a
+            # gpu_daemon block exists is safe — the proxy will 404
+            # cleanly if the daemon dies between inventory and click.
+            # Without this, the Live Endpoint panel renders the
+            # "no vnc_ws registered (stub / non-GUI)" badge even for
+            # fully-GUI-capable microVMs.
+            gpu_daemon = meta.get('gpu_daemon') or {}
+            has_gpu = bool(
+                isinstance(gpu_daemon, dict) and gpu_daemon.get('vnc_port'))
+            vnc_ws = (
+                f'/plugin/range/api/vnc/{vm_name}/ws' if has_gpu else None)
             out.append({
-                'id':       vm_name,
-                'name':     vm_name,
-                'ip':       ip,
-                'os':       meta.get('os', 'unknown'),
-                'status':   'running',
-                'provider': 'microvm',
-                'vnc_ws':   None,
+                'id':           vm_name,
+                'name':         vm_name,
+                'ip':           ip,
+                'os':           meta.get('os', 'unknown'),
+                'status':       'running',
+                'provider':     'microvm',
+                'vnc_ws':       vnc_ws,
+                # Surface a coarse session_type tag so the frontend can
+                # distinguish a GUI-capable host (gpu_daemon present)
+                # from a shell-only stub. Mirrors the contract used by
+                # the Range plugin internally.
+                'session_type': 'gui' if has_gpu else 'shell',
             })
 
         if fingerprint is not None:
