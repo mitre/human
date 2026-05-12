@@ -1,13 +1,17 @@
+import ast
 import glob
 import json
 import logging
 import os
 import sys
+import tarfile
 import time
+import zipfile
 
 from importlib import import_module
 
 from app.utility.base_service import BaseService
+from plugins.human.app.c_human import Human
 from plugins.human.app.c_workflow import Workflow
 
 # Import the canonical runtime base from human_api so the dropdown
@@ -84,6 +88,80 @@ class HumanService(BaseService):
         for f in os.listdir(root):
             if os.path.isfile(os.path.join(root, f)) and not f[0] == '_':
                 await self._load_workflow_module(root, f)
+
+    async def list_legacy_workflows(self):
+        """Return pyhuman workflow metadata for the legacy builder UI.
+
+        ``load_available_workflows`` intentionally skips importing the
+        legacy modules unless HUMAN_LEGACY_PYHUMAN=1 because those imports
+        pull optional browser automation dependencies into server startup.
+        The builder still needs a workflow picker, so this path reads the
+        module-level WORKFLOW_* constants with ``ast`` instead of importing.
+        """
+        return {'workflows': self._legacy_workflow_catalog()}
+
+    async def build_human(self, data):
+        """Build a legacy pyhuman archive and register it in data_svc."""
+        try:
+            payload = dict(data or {})
+            _, name = os.path.split(str(payload.pop('name', '')).strip())
+            if not name:
+                raise ValueError('name is required')
+
+            platform = payload.pop('platform', '')
+            if platform not in ('darwin', 'linux', 'windows-psh'):
+                raise ValueError('platform must be darwin, linux, or windows-psh')
+
+            tasks = payload.pop('tasks', [])
+            if isinstance(tasks, str):
+                tasks = [tasks]
+            if not isinstance(tasks, list) or not tasks:
+                raise ValueError('at least one workflow is required')
+
+            extra = payload.pop('extra', [])
+            if isinstance(extra, str):
+                extra = [extra]
+            if not isinstance(extra, list):
+                extra = []
+
+            task_interval = int(payload.pop('task_interval', 10) or 10)
+            task_count = int(payload.pop('task_count', 5) or 5)
+            task_cluster_interval = int(
+                payload.pop('task_cluster_interval', 500) or 500)
+
+            await self._select_modules_and_compress(
+                modules=tasks,
+                name=name,
+                platform=platform,
+                task_interval=task_interval,
+                tasks_per_cluster=task_count,
+                task_cluster_interval=task_cluster_interval,
+                extra=extra,
+            )
+            humans = await self.data_svc.locate(
+                'humans', match=dict(name=name))
+            if humans:
+                return humans[0].display
+            return Human(
+                name=name,
+                task_interval=task_interval,
+                task_cluster_interval=task_cluster_interval,
+                tasks_per_cluster=task_count,
+                platform=platform,
+                extra=extra,
+                workflows=[],
+            ).display
+        except Exception as e:
+            self.log.error('Error building legacy human. %s' % e)
+            raise
+
+    async def load_humans(self, data=None):
+        data = data or {}
+        return [
+            h.display
+            for h in await self.data_svc.locate(
+                'humans', match=dict(name=data.get('name')))
+        ]
 
     # ------------------------------------------------------------------ #
     # Timestone live-UI helpers                                           #
@@ -494,3 +572,135 @@ class HumanService(BaseService):
             await self.data_svc.store(Workflow(name=workflow_name, description=workflow_description, file=workflow_file))
         except Exception as e:
             self.log.error('Error loading extension=%s, %s' % (module_path, e))
+
+    def _legacy_workflow_catalog(self):
+        root = os.path.join(self.pyhuman_path, 'app', 'workflows')
+        if not os.path.isdir(root):
+            return []
+
+        out = []
+        for workflow_file in sorted(os.listdir(root)):
+            if workflow_file.startswith('_') or not workflow_file.endswith('.py'):
+                continue
+            path = os.path.join(root, workflow_file)
+            meta = self._read_workflow_metadata(path)
+            if not meta.get('name'):
+                continue
+            out.append({
+                'name': meta['name'],
+                'description': meta.get('description') or '',
+                'file': workflow_file,
+            })
+        return sorted(out, key=lambda w: w['name'].lower())
+
+    @staticmethod
+    def _read_workflow_metadata(path):
+        try:
+            with open(path, encoding='utf-8') as f:
+                tree = ast.parse(f.read(), filename=path)
+        except Exception:
+            return {}
+
+        values = {}
+        for node in tree.body:
+            if not isinstance(node, ast.Assign):
+                continue
+            if not isinstance(node.value, ast.Constant):
+                continue
+            if not isinstance(node.value.value, str):
+                continue
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    values[target.id] = node.value.value
+        return {
+            'name': values.get('WORKFLOW_NAME'),
+            'description': values.get('WORKFLOW_DESCRIPTION'),
+        }
+
+    async def _create_windows_archive(self, payload_path, behaviors, name):
+        os.makedirs(payload_path, exist_ok=True)
+        file_name = name + '.zip'
+        with zipfile.ZipFile(os.path.join(payload_path, file_name), 'w') as win_zip:
+            for behavior in behaviors:
+                arc_name = os.path.join('app', 'workflows', os.path.basename(behavior))
+                win_zip.write(self.pyhuman_path + behavior, arc_name)
+            for root, dirs, files in os.walk(os.path.join(self.pyhuman_path, 'data')):
+                for file in files:
+                    arc_name = os.path.join('data', os.path.basename(file))
+                    win_zip.write(os.path.join(root, file), arc_name)
+            for root, dirs, files in os.walk(os.path.join(self.pyhuman_path, 'app', 'utility')):
+                for file in files:
+                    arc_name = os.path.join('app', 'utility', os.path.basename(file))
+                    win_zip.write(os.path.join(root, file), arc_name)
+            win_zip.write(os.path.join(self.pyhuman_path, 'human.py'), 'human.py')
+            win_zip.write(os.path.join(self.pyhuman_path, 'requirements.txt'), 'requirements.txt')
+
+    async def _create_unix_archive(self, payload_path, behaviors, name):
+        os.makedirs(payload_path, exist_ok=True)
+        file_name = name + '.tar.gz'
+        with tarfile.open(os.path.join(payload_path, file_name), 'w:gz') as unix_tar:
+            unix_tar.add(os.path.join(self.pyhuman_path, 'data'), arcname='data/.')
+            unix_tar.add(os.path.join(self.pyhuman_path, 'app', 'utility'), arcname='app/utility/.')
+            for behavior in behaviors:
+                unix_tar.add(
+                    self.pyhuman_path + behavior,
+                    arcname=os.path.join('app', 'workflows', os.path.basename(behavior)),
+                )
+            unix_tar.add(os.path.join(self.pyhuman_path, 'human.py'), arcname='human.py')
+            unix_tar.add(os.path.join(self.pyhuman_path, 'requirements.txt'), arcname='requirements.txt')
+
+    async def _select_modules_and_compress(
+            self, modules, name, platform, task_interval,
+            task_cluster_interval, tasks_per_cluster, extra):
+        payload_path = os.path.abspath(os.path.join(self.human_dir, 'payloads'))
+        behaviors, workflows = await self._append_module_paths(modules, [])
+        self.log.debug('Compressing new legacy human: %s' % name)
+
+        if platform == 'windows-psh':
+            await self._create_windows_archive(payload_path, behaviors, name)
+        else:
+            await self._create_unix_archive(payload_path, behaviors, name)
+
+        await self.data_svc.store(Human(
+            name=name,
+            task_interval=task_interval,
+            task_cluster_interval=task_cluster_interval,
+            tasks_per_cluster=tasks_per_cluster,
+            platform=platform,
+            extra=extra,
+            workflows=workflows,
+        ))
+
+    async def _append_module_paths(self, modules, behaviors):
+        workflows = []
+        catalog = {w['name']: w for w in self._legacy_workflow_catalog()}
+        catalog.update({
+            os.path.splitext(w['file'])[0]: w
+            for w in catalog.values()
+        })
+        for sm in modules:
+            workflow = []
+            try:
+                workflow = await self.data_svc.locate('workflows', match=dict(name=sm))
+            except Exception:
+                workflow = []
+            if workflow:
+                item = workflow[0]
+                disp = getattr(item, 'display', None) or {}
+                file_name = disp.get('file') or getattr(item, 'file', None)
+                if not file_name:
+                    raise ValueError('workflow %s has no file' % sm)
+                behaviors.append('/app/workflows/' + file_name)
+                workflows.append(item)
+                continue
+
+            entry = catalog.get(sm)
+            if not entry:
+                raise ValueError('unknown workflow: %s' % sm)
+            behaviors.append('/app/workflows/' + entry['file'])
+            workflows.append(Workflow(
+                name=entry['name'],
+                description=entry.get('description') or '',
+                file=entry['file'],
+            ))
+        return behaviors, workflows

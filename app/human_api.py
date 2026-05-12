@@ -245,6 +245,40 @@ class HumanApi:
             traceback.print_exc()
             return web.json_response({'workflows': []}, status=500)
 
+    async def api_legacy_workflows(self, request):
+        try:
+            payload = await self.human_svc.list_legacy_workflows()
+            return web.json_response(payload)
+        except Exception:
+            traceback.print_exc()
+            return web.json_response({'workflows': []}, status=500)
+
+    async def api_legacy_humans(self, request):
+        try:
+            payload = await self.human_svc.load_humans({})
+            return web.json_response({'humans': payload})
+        except Exception:
+            traceback.print_exc()
+            return web.json_response({'humans': []}, status=500)
+
+    async def api_legacy_build(self, request):
+        try:
+            body = dict(await request.json())
+        except Exception:
+            return web.json_response(
+                {'status': 'error', 'error': 'invalid JSON body'},
+                status=400)
+        try:
+            human = await self.human_svc.build_human(body)
+            return web.json_response({'status': 'success', 'human': human})
+        except ValueError as e:
+            return web.json_response(
+                {'status': 'error', 'error': str(e)}, status=400)
+        except Exception as e:
+            traceback.print_exc()
+            return web.json_response(
+                {'status': 'error', 'error': str(e)}, status=500)
+
     async def api_run(self, request):
         """Ad-hoc dispatch: focus-grab click + type text + Enter via the
         host's tablet *and* keyboard daemons.

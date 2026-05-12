@@ -534,6 +534,7 @@
          calls .autoRefreshAfterRecording() on the recordings_ready SSE
          event so a fresh MP4 pops to the top without a page reload. -->
     <RecordingsBrowser ref="recordingsBrowserRef" />
+    <LegacyHumanBuilder />
   </div>
 </template>
 
@@ -541,6 +542,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, inject } from 'vue'
 import LiveEndpointViewer from '../components/LiveEndpointViewer.vue'
 import RecordingsBrowser from '../components/RecordingsBrowser.vue'
+import LegacyHumanBuilder from '../components/LegacyHumanBuilder.vue'
 
 // Mirrors range.vue (line 357): the host app injects $api for HTTP calls.
 const $api = inject('$api')

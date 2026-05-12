@@ -40,6 +40,19 @@ async def enable(services):
     app.router.add_route('POST', '/plugin/human/api/run',       human_api.api_run)
     app.router.add_route('POST', '/plugin/human/api/input',     human_api.api_input)
 
+    # Legacy pyhuman archive-builder routes. These keep the old
+    # download-cradle workflow available from the modern Vue UI without
+    # mixing it into the special-socket HID execution path.
+    app.router.add_route(
+        'GET', '/plugin/human/api/legacy/workflows',
+        human_api.api_legacy_workflows)
+    app.router.add_route(
+        'GET', '/plugin/human/api/legacy/humans',
+        human_api.api_legacy_humans)
+    app.router.add_route(
+        'POST', '/plugin/human/api/legacy/build',
+        human_api.api_legacy_build)
+
     # Chord-palette dispatcher (overnight-stabilization 2026-05-10).
     # Body: {host_id, keys: [...], hold_ms?}. Backend for the
     # tier-1/tier-2/tier-3 chord buttons in human.vue.
