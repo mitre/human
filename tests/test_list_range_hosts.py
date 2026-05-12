@@ -8,7 +8,7 @@ agent writes a ``meta.json`` per VM under
 exercise the meta.json-scan path.
 
 Acceptance:
-  - empty base dir -> stubs (back-compat)
+  - empty base dir -> clean no-range empty state
   - one meta.json  -> one real host with the right fields
   - many meta.json -> all returned
   - malformed meta -> skipped + others returned
@@ -34,21 +34,21 @@ def _write_meta(base_dir: str, vm_name: str, vm_id: str, **overrides) -> str:
     """Write a Range-provider-shaped meta.json. Returns the run dir."""
     run_dir = os.path.join(base_dir, f'{vm_name}-{vm_id}')
     os.makedirs(run_dir, exist_ok=True)
+    live_pid = os.getpid()
     meta = {
         'vm_name': vm_name,
         'os': 'windows',
         'ip': '192.168.66.97',
-        'ch_pid': 12345,
+        'ch_pid': live_pid,
         'tap': f'tap-ts-{vm_id}',
         'input_daemon': {
             'socket': os.path.join(run_dir, 'input.sock'),
             'operator_socket': os.path.join(run_dir, 'input-op.sock'),
-            'pid': 12346,
+            'pid': live_pid,
         },
         'gpu_daemon': {
             'socket': os.path.join(run_dir, 'gpu.sock'),
-            'vnc_port': 5901,
-            'pid': 12347,
+            'pid': live_pid,
             'log': os.path.join(run_dir, 'gpu.log'),
         },
     }
@@ -88,21 +88,34 @@ class _DataStubReturning:
 class _Services(dict):
     """Minimum services dict HumanService can stomach."""
 
-    def __init__(self, data_svc):
+    def __init__(self, data_svc, range_svc=None):
         super().__init__()
         self['file_svc'] = None
         self['data_svc'] = data_svc
+        if range_svc is not None:
+            self['range_svc'] = range_svc
 
     def get(self, key):
         return super().get(key)
 
 
-def _make_svc(data_svc):
+class _ProviderStub:
+    def __init__(self, runtime_base):
+        self.carrier_runtime_base = runtime_base
+
+
+class _RangeSvcStub:
+    def __init__(self, runtime_base):
+        self.providers = {'lab-ch-mine': _ProviderStub(runtime_base)}
+
+
+def _make_svc(data_svc, range_svc=None):
     """Build a HumanService with stubbed deps. We bypass __init__ to
     avoid sys.path mutation and the ``add_service`` registry side-effect
     (which BaseService inherits and which assumes a running Caldera)."""
     from plugins.human.app import human_svc as svc_mod
     inst = svc_mod.HumanService.__new__(svc_mod.HumanService)
+    inst.services = _Services(data_svc, range_svc=range_svc)
     inst.file_svc = None
     inst.data_svc = data_svc
     inst.log = svc_mod._log
@@ -128,25 +141,24 @@ class ListRangeHostsTests(unittest.TestCase):
         return asyncio.get_event_loop().run_until_complete(coro) \
             if False else asyncio.new_event_loop().run_until_complete(coro)
 
-    # 1. No meta.json -> stubs.
-    def test_no_meta_returns_stubs(self):
+    # 1. No meta.json -> no-range empty state.
+    def test_no_meta_returns_empty_state(self):
         svc = _make_svc(_DataStub())
         out = self._run(svc.list_range_hosts())
-        self.assertEqual(out['profile'], '(stub)')
-        ids = [h['id'] for h in out['hosts']]
-        self.assertEqual(ids, ['host-stub-1', 'host-stub-2'])
+        self.assertEqual(out['profile'], '(no range)')
+        self.assertEqual(out['hosts'], [])
 
-    # 1b. data_svc returns empty list -> still falls through to scan/stub.
-    def test_empty_data_svc_returns_stubs(self):
+    # 1b. data_svc returns empty list -> still falls through to scan/empty.
+    def test_empty_data_svc_returns_empty_state(self):
         svc = _make_svc(_DataStubEmpty())
         out = self._run(svc.list_range_hosts())
-        self.assertEqual(out['profile'], '(stub)')
-        self.assertEqual(len(out['hosts']), 2)
+        self.assertEqual(out['profile'], '(no range)')
+        self.assertEqual(out['hosts'], [])
 
     # 2. One meta.json -> one real host with right fields.
     def test_single_meta_returns_one_real_host(self):
-        _write_meta(self.tmpbase, 'windows-victim', '01afadfd',
-                    ip='192.168.66.97', os='windows')
+        run_dir = _write_meta(self.tmpbase, 'windows-victim', '01afadfd',
+                              ip='192.168.66.97', os='windows')
         svc = _make_svc(_DataStub())
         out = self._run(svc.list_range_hosts())
         self.assertEqual(out['profile'], '(active range)')
@@ -158,6 +170,39 @@ class ListRangeHostsTests(unittest.TestCase):
         self.assertEqual(h['os'], 'windows')
         self.assertEqual(h['status'], 'running')
         self.assertEqual(h['provider'], 'microvm')
+        self.assertEqual(h['session_type'], 'shell')
+        self.assertIsNone(h['frame_ws'])
+        self.assertEqual(h['special_socket'],
+                         os.path.join(run_dir, 'gpu.sock'))
+        self.assertNotIn('vnc_ws', h)
+
+    def test_gui_meta_with_frame_socket_returns_frame_ws(self):
+        run_dir = _write_meta(
+            self.tmpbase,
+            'windows-gui',
+            '02feed01',
+            session_type='gui',
+            gpu_daemon={
+                'socket': os.path.join(
+                    self.tmpbase, 'windows-gui-02feed01', 'gpu.sock'),
+                'frame_socket': os.path.join(
+                    self.tmpbase, 'windows-gui-02feed01', 'frame.sock'),
+                'pid': os.getpid(),
+            },
+        )
+        svc = _make_svc(_DataStub())
+        out = self._run(svc.list_range_hosts())
+        h = out['hosts'][0]
+        self.assertEqual(h['session_type'], 'gui')
+        self.assertEqual(
+            h['frame_ws'],
+            '/plugin/range/api/frame/windows-gui/ws',
+        )
+        self.assertEqual(
+            h['special_socket'],
+            os.path.join(run_dir, 'frame.sock'),
+        )
+        self.assertNotIn('vnc_ws', h)
 
     # 3. Multiple meta.json -> all returned.
     def test_multiple_meta_returns_all(self):
@@ -195,6 +240,39 @@ class ListRangeHostsTests(unittest.TestCase):
         self.assertEqual(len(out['hosts']), 1)
         self.assertEqual(out['hosts'][0]['name'], 'good-vm')
 
+    def test_stale_meta_is_skipped(self):
+        _write_meta(self.tmpbase, 'dead-vm', 'aaaa1111', ch_pid=99999999)
+        _write_meta(self.tmpbase, 'live-vm', 'bbbb2222')
+
+        svc = _make_svc(_DataStub())
+        out = self._run(svc.list_range_hosts())
+
+        self.assertEqual(len(out['hosts']), 1)
+        self.assertEqual(out['hosts'][0]['name'], 'live-vm')
+
+    def test_dead_gpu_daemon_disables_frame_socket(self):
+        _write_meta(
+            self.tmpbase,
+            'windows-gui',
+            '02feed01',
+            session_type='gui',
+            gpu_daemon={
+                'socket': os.path.join(
+                    self.tmpbase, 'windows-gui-02feed01', 'gpu.sock'),
+                'frame_socket': os.path.join(
+                    self.tmpbase, 'windows-gui-02feed01', 'frame.sock'),
+                'pid': 99999999,
+            },
+        )
+
+        svc = _make_svc(_DataStub())
+        out = self._run(svc.list_range_hosts())
+        h = out['hosts'][0]
+
+        self.assertEqual(h['session_type'], 'shell')
+        self.assertIsNone(h['frame_ws'])
+        self.assertIsNone(h['special_socket'])
+
     # 5. ip + vm_name propagate to the right output fields.
     def test_field_propagation(self):
         _write_meta(self.tmpbase, 'my-special-vm', 'deadbeef',
@@ -225,6 +303,77 @@ class ListRangeHostsTests(unittest.TestCase):
         self.assertEqual(out['profile'], '(active range)')
         self.assertEqual(len(out['hosts']), 1)
         self.assertEqual(out['hosts'][0]['id'], 'data-svc-host')
+
+    def test_profile_runtime_base_from_range_provider_is_scanned(self):
+        default_base = self.tmpbase
+        mine_base = tempfile.mkdtemp(prefix='test-list-range-hosts-mine-')
+        self.addCleanup(lambda: shutil.rmtree(mine_base, ignore_errors=True))
+        _write_meta(mine_base, 'linux-gui', 'abcd1234',
+                    ip='192.168.66.42', os='linux',
+                    session_type='gui',
+                    gpu_daemon={
+                        'socket': os.path.join(
+                            mine_base, 'linux-gui-abcd1234', 'gpu.sock'),
+                        'frame_socket': os.path.join(
+                            mine_base, 'linux-gui-abcd1234', 'frame.sock'),
+                        'pid': os.getpid(),
+                    })
+
+        svc = _make_svc(_DataStub(), _RangeSvcStub(mine_base))
+        out = self._run(svc.list_range_hosts())
+
+        self.assertEqual(default_base, self.tmpbase)
+        self.assertEqual(out['profile'], '(active range)')
+        self.assertEqual([h['id'] for h in out['hosts']], ['linux-gui'])
+        self.assertEqual(
+            out['hosts'][0]['frame_ws'],
+            '/plugin/range/api/frame/linux-gui/ws',
+        )
+
+    def test_human_api_resolvers_accept_profile_runtime_base(self):
+        from plugins.human.app import human_api
+
+        mine_base = tempfile.mkdtemp(prefix='test-human-api-mine-')
+        self.addCleanup(lambda: shutil.rmtree(mine_base, ignore_errors=True))
+        run_dir = _write_meta(mine_base, 'windows-gui', 'abcd1234',
+                              session_type='gui',
+                              input_daemon={
+                                  'operator_socket': os.path.join(
+                                      mine_base, 'windows-gui-abcd1234',
+                                      'input-op.sock'),
+                                  'pid': os.getpid(),
+                              },
+                              keyboard_daemon={
+                                  'operator_socket': os.path.join(
+                                      mine_base, 'windows-gui-abcd1234',
+                                      'input-kbd-op.sock'),
+                                  'pid': os.getpid(),
+                              },
+                              gpu_daemon={
+                                  'socket': os.path.join(
+                                      mine_base, 'windows-gui-abcd1234',
+                                      'gpu.sock'),
+                                  'frame_socket': os.path.join(
+                                      mine_base, 'windows-gui-abcd1234',
+                                      'frame.sock'),
+                                  'pid': os.getpid(),
+                              })
+
+        bases = [self.tmpbase, mine_base]
+        self.assertEqual(
+            human_api.HumanApi._resolve_operator_socket(
+                'windows-gui', bases),
+            os.path.join(run_dir, 'input-op.sock'),
+        )
+        self.assertEqual(
+            human_api.HumanApi._resolve_keyboard_socket(
+                'windows-gui', bases),
+            os.path.join(run_dir, 'input-kbd-op.sock'),
+        )
+        self.assertEqual(
+            human_api.HumanApi._resolve_frame_socket('windows-gui', bases),
+            os.path.join(run_dir, 'frame.sock'),
+        )
 
 
 if __name__ == '__main__':

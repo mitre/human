@@ -1,0 +1,210 @@
+[
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftMeta",
+      "r"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 400
+  },
+  {
+    "action": "type",
+    "per_char_ms": 90,
+    "text": "msedge"
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 2500
+  },
+  {
+    "action": "dwell",
+    "ms": 2326
+  },
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftControl",
+      "l"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 150
+  },
+  {
+    "action": "type",
+    "per_char_ms": 110,
+    "text": "https://news.ycombinator.com"
+  },
+  {
+    "action": "dwell",
+    "ms": 250
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 1500
+  },
+  {
+    "action": "dwell",
+    "ms": 13540
+  },
+  {
+    "action": "scroll",
+    "ticks": 3,
+    "wheel": "down"
+  },
+  {
+    "action": "dwell",
+    "ms": 350
+  },
+  {
+    "action": "dwell",
+    "ms": 10691
+  },
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftControl",
+      "l"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 150
+  },
+  {
+    "action": "type",
+    "per_char_ms": 110,
+    "text": "https://news.ycombinator.com/newest"
+  },
+  {
+    "action": "dwell",
+    "ms": 250
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 1500
+  },
+  {
+    "action": "dwell",
+    "ms": 14063
+  },
+  {
+    "action": "scroll",
+    "ticks": 4,
+    "wheel": "down"
+  },
+  {
+    "action": "dwell",
+    "ms": 350
+  },
+  {
+    "action": "dwell",
+    "ms": 13383
+  },
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftControl",
+      "l"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 150
+  },
+  {
+    "action": "type",
+    "per_char_ms": 110,
+    "text": "https://news.ycombinator.com/show"
+  },
+  {
+    "action": "dwell",
+    "ms": 250
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 1500
+  },
+  {
+    "action": "dwell",
+    "ms": 10066
+  },
+  {
+    "action": "scroll",
+    "ticks": 3,
+    "wheel": "down"
+  },
+  {
+    "action": "dwell",
+    "ms": 350
+  },
+  {
+    "action": "dwell",
+    "ms": 10469
+  },
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftControl",
+      "l"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 150
+  },
+  {
+    "action": "type",
+    "per_char_ms": 110,
+    "text": "https://news.ycombinator.com/ask"
+  },
+  {
+    "action": "dwell",
+    "ms": 250
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 1500
+  },
+  {
+    "action": "dwell",
+    "ms": 13720
+  },
+  {
+    "action": "dwell",
+    "ms": 3070
+  }
+]

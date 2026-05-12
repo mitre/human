@@ -46,6 +46,7 @@ log = logging.getLogger(__name__)
 RFB_VERSION = b"RFB 003.008\n"
 _HANDSHAKE_TIMEOUT_S = 10.0
 _RECV_TIMEOUT_S = 30.0
+_TSFB_HEADER_LEN = 24
 
 
 def _recv_exact(sock: socket.socket, n: int) -> bytes:
@@ -130,6 +131,27 @@ def _read_one_update(sock: socket.socket, fb: np.ndarray) -> bool:
         return False
     else:
         raise RuntimeError(f"unknown RFB server message type {msg_type}")
+
+
+def _read_tsfb_frame(sock: socket.socket) -> tuple[int, int, int, bytes]:
+    """Request and read one Timestone special-socket framebuffer.
+
+    Wire format is produced by ``vhost-user-gpu-2d --frame-socket``:
+    ``TSFB`` magic, little-endian width/height/tick/length, then full
+    RGBA pixels.
+    """
+    sock.sendall(b"F")
+    header = _recv_exact(sock, _TSFB_HEADER_LEN)
+    if header[:4] != b"TSFB":
+        raise RuntimeError(f"bad TSFB frame magic: {header[:4]!r}")
+    width, height, tick, length = struct.unpack("<IIQI", header[4:])
+    expected = width * height * 4
+    if length != expected:
+        raise RuntimeError(
+            f"bad TSFB frame length: got {length}, expected {expected} "
+            f"for {width}x{height}"
+        )
+    return width, height, tick, _recv_exact(sock, length)
 
 
 class RfbRecorder:
@@ -351,3 +373,206 @@ class RfbRecorder:
         except BaseException as e:  # noqa: BLE001 — surface in stop()
             self._capture_error = e
             log.warning("RfbRecorder capture loop aborted: %r", e)
+
+
+class FrameSocketRecorder:
+    """Record a Timestone frame-socket framebuffer to MP4."""
+
+    def __init__(
+        self,
+        socket_path: str | Path,
+        output_mp4: Path,
+        fps: int = 10,
+    ) -> None:
+        self.socket_path = str(socket_path)
+        self.output_mp4 = Path(output_mp4)
+        self.fps = int(fps)
+        if self.fps <= 0:
+            raise ValueError(f"fps must be > 0, got {fps}")
+
+        self._sock: Optional[socket.socket] = None
+        self._ffmpeg: Optional[subprocess.Popen] = None
+        self._thread: Optional[threading.Thread] = None
+        self._stop = threading.Event()
+        self._width: int = 0
+        self._height: int = 0
+        self._pending_frame: Optional[bytes] = None
+        self._frames_written: int = 0
+        self._capture_error: Optional[BaseException] = None
+        self._started = False
+
+    def start(self) -> None:
+        if self._started:
+            raise RuntimeError("FrameSocketRecorder.start() called twice")
+
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(_HANDSHAKE_TIMEOUT_S)
+        try:
+            sock.connect(self.socket_path)
+            w, h, _tick, frame = _read_tsfb_frame(sock)
+        except Exception:
+            sock.close()
+            raise
+        sock.settimeout(_RECV_TIMEOUT_S)
+        self._sock = sock
+        self._width, self._height = w, h
+        self._pending_frame = frame
+
+        self.output_mp4.parent.mkdir(parents=True, exist_ok=True)
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-loglevel", "error",
+            "-y",
+            "-f", "rawvideo",
+            "-pixel_format", "rgba",
+            "-video_size", f"{w}x{h}",
+            "-framerate", str(self.fps),
+            "-i", "-",
+            "-an",
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-preset", "ultrafast",
+            "-tune", "zerolatency",
+            str(self.output_mp4),
+        ]
+        try:
+            self._ffmpeg = subprocess.Popen(
+                ffmpeg_cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                bufsize=0,
+            )
+        except Exception:
+            sock.close()
+            self._sock = None
+            raise
+
+        self._stop.clear()
+        self._thread = threading.Thread(
+            target=self._capture_loop,
+            name=f"FrameSocketRecorder({self.socket_path})",
+            daemon=True,
+        )
+        self._started = True
+        self._thread.start()
+        log.info(
+            "FrameSocketRecorder started: %s -> %s, %dx%d @ %d fps",
+            self.socket_path, self.output_mp4, w, h, self.fps,
+        )
+
+    def stop(self, join_timeout: float = 5.0) -> Path:
+        if not self._started:
+            raise RuntimeError("FrameSocketRecorder.stop() called before start()")
+
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=join_timeout)
+            if self._thread.is_alive():
+                log.warning(
+                    "FrameSocketRecorder capture thread did not exit within %.1fs",
+                    join_timeout,
+                )
+
+        if self._sock is not None:
+            try:
+                self._sock.sendall(b"Q")
+            except Exception:
+                pass
+            try:
+                self._sock.close()
+            except Exception:
+                pass
+            self._sock = None
+
+        if self._ffmpeg is not None:
+            try:
+                if self._ffmpeg.stdin and not self._ffmpeg.stdin.closed:
+                    self._ffmpeg.stdin.close()
+            except BrokenPipeError:
+                pass
+            try:
+                rc = self._ffmpeg.wait(timeout=15.0)
+            except subprocess.TimeoutExpired:
+                log.warning("ffmpeg did not finalize within 15s; killing")
+                self._ffmpeg.kill()
+                rc = self._ffmpeg.wait()
+            stderr = b""
+            if self._ffmpeg.stderr is not None:
+                try:
+                    stderr = self._ffmpeg.stderr.read() or b""
+                except Exception:
+                    pass
+            if rc != 0 and self._frames_written == 0:
+                raise RuntimeError(
+                    f"ffmpeg exited {rc} with no frames written: "
+                    f"{stderr.decode('utf-8', 'replace').strip()}"
+                )
+            elif rc != 0:
+                log.warning(
+                    "ffmpeg exited %d after %d frames: %s",
+                    rc, self._frames_written,
+                    stderr.decode("utf-8", "replace").strip(),
+                )
+            self._ffmpeg = None
+
+        if self._capture_error is not None:
+            log.warning(
+                "FrameSocketRecorder capture thread raised: %r",
+                self._capture_error,
+            )
+
+        log.info(
+            "FrameSocketRecorder stopped: %d frames written to %s",
+            self._frames_written, self.output_mp4,
+        )
+        return self.output_mp4
+
+    @property
+    def frames_written(self) -> int:
+        return self._frames_written
+
+    @property
+    def resolution(self) -> tuple[int, int]:
+        return (self._width, self._height)
+
+    def _capture_loop(self) -> None:
+        sock = self._sock
+        ffmpeg = self._ffmpeg
+        assert sock is not None and ffmpeg is not None
+        assert ffmpeg.stdin is not None
+
+        period = 1.0 / self.fps
+        next_deadline = time.monotonic()
+
+        try:
+            while not self._stop.is_set():
+                frame = self._pending_frame
+                self._pending_frame = None
+                if frame is None:
+                    w, h, _tick, frame = _read_tsfb_frame(sock)
+                    if (w, h) != (self._width, self._height):
+                        raise RuntimeError(
+                            f"frame geometry changed from "
+                            f"{self._width}x{self._height} to {w}x{h}"
+                        )
+                try:
+                    ffmpeg.stdin.write(frame)
+                except BrokenPipeError as e:
+                    raise RuntimeError("ffmpeg stdin broken; encoder died") from e
+                self._frames_written += 1
+
+                next_deadline += period
+                slack = next_deadline - time.monotonic()
+                if slack > 0:
+                    if self._stop.wait(timeout=slack):
+                        break
+                elif slack < -2 * period:
+                    log.warning(
+                        "FrameSocketRecorder behind by %.2fs; resyncing pacing",
+                        -slack,
+                    )
+                    next_deadline = time.monotonic()
+        except BaseException as e:  # noqa: BLE001
+            self._capture_error = e
+            log.warning("FrameSocketRecorder capture loop aborted: %r", e)

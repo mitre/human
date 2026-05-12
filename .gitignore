@@ -3,3 +3,6 @@ __pycache__
 .DS_Store
 payloads/*.tar.gz
 payloads/*.zip
+
+# Runtime artifacts created by framebuffer recording proof runs.
+data/recordings/

@@ -1,0 +1,173 @@
+[
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftMeta",
+      "r"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 400
+  },
+  {
+    "action": "type",
+    "per_char_ms": 90,
+    "text": "msedge"
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 2500
+  },
+  {
+    "action": "dwell",
+    "ms": 2326
+  },
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftControl",
+      "l"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 150
+  },
+  {
+    "action": "type",
+    "per_char_ms": 110,
+    "text": "https://www.google.com"
+  },
+  {
+    "action": "dwell",
+    "ms": 250
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 1500
+  },
+  {
+    "action": "dwell",
+    "ms": 2617
+  },
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftControl",
+      "l"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 150
+  },
+  {
+    "action": "type",
+    "per_char_ms": 110,
+    "text": "https://www.google.com/search?q=caldera+adversary+emulation"
+  },
+  {
+    "action": "dwell",
+    "ms": 250
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 1500
+  },
+  {
+    "action": "dwell",
+    "ms": 10691
+  },
+  {
+    "action": "scroll",
+    "ticks": 4,
+    "wheel": "down"
+  },
+  {
+    "action": "dwell",
+    "ms": 350
+  },
+  {
+    "action": "dwell",
+    "ms": 14063
+  },
+  {
+    "action": "scroll",
+    "ticks": 3,
+    "wheel": "down"
+  },
+  {
+    "action": "dwell",
+    "ms": 350
+  },
+  {
+    "action": "dwell",
+    "ms": 2230
+  },
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftControl",
+      "l"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 150
+  },
+  {
+    "action": "type",
+    "per_char_ms": 110,
+    "text": "https://www.google.com/search?q=mitre+att%26ck+matrix"
+  },
+  {
+    "action": "dwell",
+    "ms": 250
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 1500
+  },
+  {
+    "action": "dwell",
+    "ms": 10066
+  },
+  {
+    "action": "scroll",
+    "ticks": 5,
+    "wheel": "down"
+  },
+  {
+    "action": "dwell",
+    "ms": 350
+  },
+  {
+    "action": "dwell",
+    "ms": 3496
+  }
+]

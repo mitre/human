@@ -1,0 +1,89 @@
+[
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftMeta",
+      "r"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 400
+  },
+  {
+    "action": "type",
+    "per_char_ms": 90,
+    "text": "notepad"
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 3000
+  },
+  {
+    "action": "dwell",
+    "ms": 1500
+  },
+  {
+    "action": "type",
+    "per_char_ms": 60,
+    "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation."
+  },
+  {
+    "action": "dwell",
+    "ms": 1500
+  },
+  {
+    "action": "chord",
+    "hold_ms": 80,
+    "keys": [
+      "LeftControl",
+      "s"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "dwell",
+    "ms": 1200
+  },
+  {
+    "action": "type",
+    "per_char_ms": 80,
+    "text": "note_legacy.txt"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 1500
+  },
+  {
+    "action": "chord",
+    "hold_ms": 80,
+    "keys": [
+      "LeftControl",
+      "w"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "dwell",
+    "ms": 800
+  }
+]

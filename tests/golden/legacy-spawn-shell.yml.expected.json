@@ -1,0 +1,65 @@
+[
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftMeta",
+      "r"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 400
+  },
+  {
+    "action": "type",
+    "per_char_ms": 90,
+    "text": "cmd"
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 3000
+  },
+  {
+    "action": "dwell",
+    "ms": 1500
+  },
+  {
+    "action": "type",
+    "per_char_ms": 90,
+    "text": "dir"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 2500
+  },
+  {
+    "action": "dwell",
+    "ms": 7747
+  },
+  {
+    "action": "type",
+    "per_char_ms": 90,
+    "text": "exit"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 800
+  }
+]

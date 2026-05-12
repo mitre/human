@@ -47,7 +47,6 @@ def _stub_meta(base_dir: str, host_id: str, sock_path: str) -> str:
         },
         'gpu_daemon': {
             'socket': os.path.join(run_dir, 'gpu.sock'),
-            'vnc_port': 5901,
             'pid': 1235,
         },
     }
@@ -238,6 +237,8 @@ class RunProfileSseTests(unittest.IsolatedAsyncioTestCase):
         self.app = web.Application()
         self.app.router.add_route(
             'GET', '/plugin/human/api/run-profile', self.api.api_run_profile)
+        self.app.router.add_route(
+            'POST', '/plugin/human/api/input', self.api.api_input)
 
         from aiohttp.test_utils import TestServer, TestClient
         self.server = TestServer(self.app)
@@ -301,6 +302,43 @@ class RunProfileSseTests(unittest.IsolatedAsyncioTestCase):
         body = await resp.json()
         self.assertEqual(body['status'], 'error')
         self.assertIn('no-such-vm', body['error'])
+
+    async def test_api_input_normalizes_and_writes_to_operator_socket(self):
+        resp = await self.client.post(
+            '/plugin/human/api/input',
+            json={
+                'host_id': 'demovm',
+                'messages': [
+                    {
+                        'action': 'move',
+                        'target': {
+                            'kind': 'absolute',
+                            'x': 512,
+                            'y': 384,
+                        },
+                    },
+                    {'action': 'click', 'button': 'left'},
+                    {'action': 'scroll', 'direction': 'down', 'ticks': 2},
+                ],
+            })
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        self.assertEqual(body['status'], 'success')
+        self.assertEqual(body['sent'], 3)
+
+        for _ in range(40):
+            if len(self.received) >= 3:
+                break
+            await asyncio.sleep(0.05)
+
+        self.assertEqual(len(self.received), 3, self.received)
+        self.assertEqual(self.received[0]['action'], 'move')
+        self.assertEqual(self.received[0]['target']['kind'], 'abs')
+        self.assertEqual(self.received[0]['duration_ms'], 0)
+        self.assertEqual(self.received[1], {'action': 'click', 'button': 'left'})
+        self.assertEqual(
+            self.received[2],
+            {'action': 'scroll', 'wheel': 'down', 'ticks': 2})
 
 
 # --- 3. platform-aware abilities (surf-the-web) regression --------------

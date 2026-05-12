@@ -1,0 +1,85 @@
+[
+  {
+    "action": "dwell",
+    "ms": 800
+  },
+  {
+    "action": "move",
+    "duration_ms": 700,
+    "easing": "ease-out",
+    "target": {
+      "kind": "abs",
+      "x": 4096,
+      "y": 4096
+    }
+  },
+  {
+    "action": "dwell",
+    "ms": 250
+  },
+  {
+    "action": "click",
+    "button": "left"
+  },
+  {
+    "action": "move",
+    "duration_ms": 900,
+    "easing": "ease-out",
+    "target": {
+      "kind": "abs",
+      "x": 28672,
+      "y": 24576
+    }
+  },
+  {
+    "action": "chord",
+    "hold_ms": 70,
+    "keys": [
+      "LeftMeta",
+      "r"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "type",
+    "per_char_ms": 100,
+    "text": "cmd"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 900
+  },
+  {
+    "action": "type",
+    "per_char_ms": 100,
+    "text": "echo MicroVM GUI proof via special socket"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 900
+  },
+  {
+    "action": "type",
+    "per_char_ms": 100,
+    "text": "whoami"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 1500
+  }
+]

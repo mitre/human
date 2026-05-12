@@ -1,0 +1,58 @@
+[
+  {
+    "action": "dwell",
+    "ms": 2000
+  },
+  {
+    "action": "type",
+    "per_char_ms": 100,
+    "text": "15"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 2500
+  },
+  {
+    "action": "type",
+    "per_char_ms": 80,
+    "text": "echo Hello from the operator socket"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 1000
+  },
+  {
+    "action": "type",
+    "per_char_ms": 80,
+    "text": "ipconfig"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 1500
+  },
+  {
+    "action": "type",
+    "per_char_ms": 80,
+    "text": "dir C:\\"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 1500
+  }
+]

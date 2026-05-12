@@ -1,0 +1,262 @@
+[
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftMeta",
+      "r"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 400
+  },
+  {
+    "action": "type",
+    "per_char_ms": 90,
+    "text": "scalc"
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 4000
+  },
+  {
+    "action": "dwell",
+    "ms": 2000
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "name"
+  },
+  {
+    "action": "press",
+    "key": "Tab"
+  },
+  {
+    "action": "dwell",
+    "ms": 100
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "qty"
+  },
+  {
+    "action": "press",
+    "key": "Tab"
+  },
+  {
+    "action": "dwell",
+    "ms": 100
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "price"
+  },
+  {
+    "action": "press",
+    "key": "Tab"
+  },
+  {
+    "action": "dwell",
+    "ms": 100
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "total"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 600
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "widget"
+  },
+  {
+    "action": "press",
+    "key": "Tab"
+  },
+  {
+    "action": "dwell",
+    "ms": 100
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "12"
+  },
+  {
+    "action": "press",
+    "key": "Tab"
+  },
+  {
+    "action": "dwell",
+    "ms": 100
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "9.99"
+  },
+  {
+    "action": "press",
+    "key": "Tab"
+  },
+  {
+    "action": "dwell",
+    "ms": 100
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "119.88"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "gizmo"
+  },
+  {
+    "action": "press",
+    "key": "Tab"
+  },
+  {
+    "action": "dwell",
+    "ms": 100
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "5"
+  },
+  {
+    "action": "press",
+    "key": "Tab"
+  },
+  {
+    "action": "dwell",
+    "ms": 100
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "24.50"
+  },
+  {
+    "action": "press",
+    "key": "Tab"
+  },
+  {
+    "action": "dwell",
+    "ms": 100
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "122.50"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 1000
+  },
+  {
+    "action": "chord",
+    "hold_ms": 80,
+    "keys": [
+      "LeftControl",
+      "LeftAlt",
+      "c"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "dwell",
+    "ms": 800
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "totals look right."
+  },
+  {
+    "action": "press",
+    "key": "Escape"
+  },
+  {
+    "action": "dwell",
+    "ms": 100
+  },
+  {
+    "action": "dwell",
+    "ms": 800
+  },
+  {
+    "action": "chord",
+    "hold_ms": 80,
+    "keys": [
+      "LeftControl",
+      "s"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "dwell",
+    "ms": 1500
+  },
+  {
+    "action": "type",
+    "per_char_ms": 70,
+    "text": "legacy-calc-sheet"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 2000
+  },
+  {
+    "action": "chord",
+    "hold_ms": 80,
+    "keys": [
+      "LeftControl",
+      "q"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  }
+]

@@ -1,0 +1,46 @@
+---
+
+- id: server-core-demo
+  name: Server Core HID Demo
+  description: |
+    Minimal HID demo for a Windows Server Core host. After the
+    autologon fires, Server Core boots straight into a fullscreen
+    cmd.exe running sconfig.cmd — that IS a Win32 console, and GDI
+    text writes through viogpudo.sys, so typed keystrokes show up in
+    the framebuffer and in the Live-Endpoint recording.
+
+    No browser, no Explorer, no DWM — just the keyboard daemon
+    driving cmd.exe through three quick built-in commands. Used to
+    smoke-test the Range plugin's keyboard daemon split + the
+    Human plugin's keyboard-routing fix without depending on Win10
+    desktop or Win11 KVM availability.
+  adversary_persona: server-core-operator
+  duration_estimate_s: 12
+  tags:
+    - benign-human-activity
+    - human-profile
+    - server-core
+    - hid-smoke
+  steps:
+    # Settle: let the post-login UI finish painting (sconfig.cmd shows
+    # its menu and parks at "Enter number to select an option").
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 2000 } }
+
+    # Exit sconfig to a real PowerShell prompt (option 15). Without
+    # this, sconfig only accepts numeric input — anything else is
+    # rejected, so our demo commands wouldn't have a place to land.
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "15", per_char_ms: 100 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 2500 } }
+
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "echo Hello from the operator socket", per_char_ms: 80 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1000 } }
+
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "ipconfig", per_char_ms: 80 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1500 } }
+
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "dir C:\\", per_char_ms: 80 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1500 } }

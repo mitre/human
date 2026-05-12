@@ -109,10 +109,112 @@ ATOMIC_ABILITIES_DIR = HUMAN_PLUGIN_ROOT / 'data' / 'abilities' \
 ADVERSARIES_DIR = HUMAN_PLUGIN_ROOT / 'data' / 'adversaries'
 
 
+def _append_runtime_base(bases: list[str], seen: set[str], base) -> None:
+    if not base:
+        return
+    path = os.fspath(base)
+    try:
+        key = os.path.realpath(path)
+    except Exception:
+        key = path
+    if key in seen:
+        return
+    seen.add(key)
+    bases.append(path)
+
+
+def _configured_runtime_bases(services=None, runtime_bases=None) -> list[str]:
+    """Return microVM runtime bases visible to Range/Human.
+
+    ``MICROVM_RUNTIME_BASE`` remains the default for tests and legacy
+    callers. When Range is loaded, profile-specific providers can also
+    publish ``carrier_runtime_base`` (for parallel Caldera instances like
+    ``/tmp/timestone-microvms-mine``); Human must scan those too.
+    """
+    bases: list[str] = []
+    seen: set[str] = set()
+    for base in runtime_bases or []:
+        _append_runtime_base(bases, seen, base)
+
+    if services is not None and hasattr(services, 'get'):
+        for key in ('onprem_svc', 'range_svc'):
+            try:
+                svc = services.get(key)
+            except Exception:
+                continue
+            providers = getattr(svc, 'providers', None)
+            if not isinstance(providers, dict):
+                continue
+            for prov in providers.values():
+                _append_runtime_base(
+                    bases, seen, getattr(prov, 'carrier_runtime_base', None))
+
+    _append_runtime_base(bases, seen, MICROVM_RUNTIME_BASE)
+    return bases
+
+
+def _runtime_bases_label(runtime_bases=None) -> str:
+    return ', '.join(_configured_runtime_bases(runtime_bases=runtime_bases))
+
+
+def _pid_alive(pid) -> bool:
+    try:
+        pid_int = int(pid)
+    except (TypeError, ValueError):
+        return False
+    return pid_int > 0 and os.path.exists(f'/proc/{pid_int}')
+
+
+def _microvm_processes_live(meta: dict) -> bool:
+    """Return False when metadata points at dead local microVM PIDs."""
+    for key in ('ch_pid', 'pid'):
+        if key in meta and meta.get(key) is not None:
+            return _pid_alive(meta.get(key))
+    return True
+
+
+def _candidate_runtime_dirs(host_id: str, runtime_bases=None) -> list[str]:
+    paths = []
+    for base in _configured_runtime_bases(runtime_bases=runtime_bases):
+        paths.extend(glob.glob(os.path.join(base, f'{host_id}-*')))
+        exact = os.path.join(base, host_id)
+        if os.path.isdir(exact):
+            paths.append(exact)
+    unique = sorted(set(paths))
+
+    def _mtime(path: str) -> float:
+        meta_path = os.path.join(path, 'meta.json')
+        try:
+            return os.path.getmtime(meta_path)
+        except OSError:
+            try:
+                return os.path.getmtime(path)
+            except OSError:
+                return 0.0
+
+    return sorted(unique, key=_mtime, reverse=True)
+
+
+def _iter_live_microvm_meta(host_id: str, runtime_bases=None):
+    for run_dir in _candidate_runtime_dirs(host_id, runtime_bases):
+        meta_path = os.path.join(run_dir, 'meta.json')
+        if not os.path.isfile(meta_path):
+            continue
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not _microvm_processes_live(meta):
+            continue
+        yield run_dir, meta
+
+
 @for_all_public_methods(check_authorization)
 class HumanApi:
 
     def __init__(self, services, human_svc):
+        self.services = services
         self.auth_svc = services.get('auth_svc')
         self.data_svc = services.get('data_svc')
         self.human_svc = human_svc
@@ -199,7 +301,8 @@ class HumanApi:
         # everything to the tablet socket and accepts that KEY_*
         # scancodes will be dropped.
         try:
-            tablet_sock_path = self._resolve_operator_socket(host_id)
+            tablet_sock_path = self._resolve_operator_socket(
+                host_id, self._runtime_bases())
         except FileNotFoundError as e:
             return web.json_response(
                 {'status': 'error',
@@ -211,7 +314,8 @@ class HumanApi:
                  'stderr': f'host has no GUI session: {e}'},
                 status=409)
         try:
-            kbd_sock_path: str | None = self._resolve_keyboard_socket(host_id)
+            kbd_sock_path: str | None = self._resolve_keyboard_socket(
+                host_id, self._runtime_bases())
         except (FileNotFoundError, KeyError):
             kbd_sock_path = None
 
@@ -222,7 +326,7 @@ class HumanApi:
         # read it from gpu_daemon block of meta.json.
         tablet_messages = [
             {'action': 'move',
-             'target': {'kind': 'absolute', 'x': 512, 'y': 384},
+             'target': {'kind': 'abs', 'x': 512, 'y': 384},
              'duration_ms': 0},
             {'action': 'click', 'button': 'left'},
         ]
@@ -292,6 +396,71 @@ class HumanApi:
             'stderr': '',
         })
 
+    async def api_input(self, request):
+        """Direct GUI input dispatch for live framebuffer viewers.
+
+        The frame viewers are host-side: browsers cannot connect to the
+        AF_UNIX operator sockets directly, so they POST one or more
+        OperatorMessages here and this handler routes mouse-style actions
+        to the tablet daemon and key-style actions to the keyboard daemon.
+        """
+        try:
+            body = dict(await request.json())
+        except Exception:
+            return web.json_response(
+                {'status': 'error', 'stderr': 'invalid JSON body'}, status=400)
+
+        host_id = body.get('host_id')
+        if not host_id:
+            return web.json_response(
+                {'status': 'error', 'stderr': 'host_id required'}, status=400)
+
+        raw_messages = body.get('messages')
+        if raw_messages is None:
+            raw = body.get('message')
+            raw_messages = [raw] if raw is not None else []
+        if not isinstance(raw_messages, list) or not raw_messages:
+            return web.json_response(
+                {'status': 'error',
+                 'stderr': 'message or non-empty messages list required'},
+                status=400)
+
+        messages = []
+        for msg in raw_messages:
+            if not isinstance(msg, dict):
+                return web.json_response(
+                    {'status': 'error',
+                     'stderr': 'all input messages must be JSON objects'},
+                    status=400)
+            try:
+                messages.append(self._normalize_operator_message(msg))
+            except ValueError as e:
+                return web.json_response(
+                    {'status': 'error', 'stderr': str(e)}, status=400)
+
+        try:
+            result = await self._send_operator_messages(host_id, messages)
+        except FileNotFoundError as e:
+            return web.json_response(
+                {'status': 'error', 'stderr': f'host not found: {e}'},
+                status=404)
+        except KeyError as e:
+            msg = e.args[0] if e.args else str(e)
+            return web.json_response(
+                {'status': 'error', 'stderr': f'no GUI input session: {msg}'},
+                status=409)
+        except (OSError, FileNotFoundError) as e:
+            return web.json_response(
+                {'status': 'error', 'stderr': f'input send failed: {e}'},
+                status=502)
+
+        return web.json_response({
+            'status': 'success',
+            'host_id': host_id,
+            'sent': len(messages),
+            **result,
+        })
+
     async def api_chord(self, request):
         """Send a single chord (modifier+key) to the host's keyboard
         daemon. Accepts ``POST /plugin/human/api/chord`` with body::
@@ -341,7 +510,8 @@ class HumanApi:
                  'stderr': 'hold_ms must be an integer'}, status=400)
 
         try:
-            tablet_sock_path = self._resolve_operator_socket(host_id)
+            tablet_sock_path = self._resolve_operator_socket(
+                host_id, self._runtime_bases())
         except FileNotFoundError as e:
             return web.json_response(
                 {'status': 'error', 'stderr': f'host not found: {e}'},
@@ -351,13 +521,14 @@ class HumanApi:
                 {'status': 'error', 'stderr': f'no GUI session: {e}'},
                 status=409)
         try:
-            kbd_sock_path: str | None = self._resolve_keyboard_socket(host_id)
+            kbd_sock_path: str | None = self._resolve_keyboard_socket(
+                host_id, self._runtime_bases())
         except (FileNotFoundError, KeyError):
             kbd_sock_path = None
 
         tablet_messages = [
             {'action': 'move',
-             'target': {'kind': 'absolute', 'x': 512, 'y': 384},
+             'target': {'kind': 'abs', 'x': 512, 'y': 384},
              'duration_ms': 0},
             {'action': 'click', 'button': 'left'},
         ]
@@ -491,7 +662,8 @@ class HumanApi:
         # the SSE stream — we want to surface "no GUI session" as a clean
         # 400, not as a half-open SSE connection.
         try:
-            sock_path = self._resolve_operator_socket(host_id)
+            sock_path = self._resolve_operator_socket(
+                host_id, self._runtime_bases())
         except (FileNotFoundError, KeyError) as e:
             # KeyError repr-quotes the message; use .args[0] to get the
             # raw human-readable string we constructed.
@@ -515,7 +687,8 @@ class HumanApi:
         # daemons stay aligned for timing-only steps.
         kbd_sock_path: str | None
         try:
-            kbd_sock_path = self._resolve_keyboard_socket(host_id)
+            kbd_sock_path = self._resolve_keyboard_socket(
+                host_id, self._runtime_bases())
         except (FileNotFoundError, KeyError):
             kbd_sock_path = None
 
@@ -528,7 +701,8 @@ class HumanApi:
         # Fall back to '' which preserves the legacy hid.steps path for
         # any older single-platform abilities still in flight.
         try:
-            target_os = self._resolve_target_os(host_id, os_override)
+            target_os = self._resolve_target_os(
+                host_id, os_override, self._runtime_bases())
         except Exception:  # noqa: BLE001 — best-effort, fall through to ''
             target_os = ''
 
@@ -603,17 +777,14 @@ class HumanApi:
         await resp.prepare(request)
 
         # --- optional framebuffer recording ---------------------------
-        # When `record=true` we resolve the GPU daemon's RFB endpoint
-        # (local TCP for on-prem, ssh-tunnelled local TCP for cloud
-        # carriers), spawn a recorder for the duration of the profile
-        # run, and emit `recording_started` / `recording_ready` SSE
-        # events the UI can splice into its inline player.
+        # MicroVM GUI recording uses the host-side frame socket exposed
+        # by vhost-user-gpu-2d --frame-socket. Legacy RFB recording
+        # remains as a fallback for non-microVM/old metadata paths.
         recorder = None
         recorder_mp4_path = None
         recorder_url = None
         if record:
             try:
-                vnc_host, vnc_port = self._resolve_vnc_endpoint(host_id)
                 recordings_dir = Path(RECORDINGS_BASE) / host_id
                 recordings_dir.mkdir(parents=True, exist_ok=True)
                 ts = datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -625,11 +796,25 @@ class HumanApi:
                 # Lazy import: lets the rest of the plugin still load
                 # cleanly if the recorder module is missing on a host
                 # that won't need recording.
-                from plugins.human.pyhuman.recorder import RfbRecorder
-                recorder = RfbRecorder(
-                    host=vnc_host, port=vnc_port,
-                    output_mp4=recorder_mp4_path, fps=10,
-                )
+                try:
+                    frame_sock = self._resolve_frame_socket(
+                        host_id, self._runtime_bases())
+                except Exception:
+                    frame_sock = None
+                if frame_sock:
+                    from plugins.human.pyhuman.recorder import FrameSocketRecorder
+                    recorder = FrameSocketRecorder(
+                        socket_path=frame_sock,
+                        output_mp4=recorder_mp4_path, fps=10,
+                    )
+                else:
+                    from plugins.human.pyhuman.recorder import RfbRecorder
+                    vnc_host, vnc_port = self._resolve_vnc_endpoint(
+                        host_id, self._runtime_bases())
+                    recorder = RfbRecorder(
+                        host=vnc_host, port=vnc_port,
+                        output_mp4=recorder_mp4_path, fps=10,
+                    )
                 recorder.start()
                 await resp.write(
                     ('event: log\ndata: ' + json.dumps({
@@ -735,6 +920,9 @@ class HumanApi:
                 await resp.write(
                     f'data: {json.dumps(event)}\n\n'.encode())
                 count += 1
+                delay_s = self._message_delay_seconds(msg)
+                if delay_s > 0:
+                    await asyncio.sleep(delay_s)
 
             await resp.write(
                 f'data: {json.dumps({"event": "done", "count": count})}\n\n'
@@ -789,8 +977,177 @@ class HumanApi:
 
     # --- helpers ------------------------------------------------------------
 
+    def _runtime_bases(self) -> list[str]:
+        return _configured_runtime_bases(self.services)
+
     @staticmethod
-    def _resolve_target_os(host_id: str, override: str | None = None) -> str:
+    def _normalize_operator_message(msg: dict) -> dict:
+        out = dict(msg)
+        action = out.get('action')
+        if not isinstance(action, str) or not action:
+            raise ValueError('input message action required')
+
+        if action == 'move':
+            target = dict(out.get('target') or {})
+            kind = target.get('kind')
+            if kind == 'absolute':
+                kind = 'abs'
+            elif kind == 'relative':
+                kind = 'rel'
+            if kind not in ('abs', 'rel', 'named'):
+                raise ValueError(
+                    'move target.kind must be one of abs, rel, named')
+            target['kind'] = kind
+            if kind in ('abs', 'rel'):
+                try:
+                    target['x'] = int(target.get('x', 0))
+                    target['y'] = int(target.get('y', 0))
+                except (TypeError, ValueError):
+                    raise ValueError('move target x/y must be integers')
+            out['target'] = target
+            try:
+                out['duration_ms'] = max(0, int(out.get('duration_ms', 0)))
+            except (TypeError, ValueError):
+                raise ValueError('move duration_ms must be an integer')
+        elif action == 'click':
+            button = str(out.get('button') or 'left').lower()
+            if button not in ('left', 'right', 'middle'):
+                raise ValueError('click button must be left, right, or middle')
+            out['button'] = button
+        elif action == 'scroll':
+            wheel = str(out.get('wheel') or out.get('direction') or '').lower()
+            if wheel not in ('up', 'down', 'left', 'right'):
+                raise ValueError('scroll wheel must be up, down, left, or right')
+            out['wheel'] = wheel
+            out.pop('direction', None)
+            try:
+                out['ticks'] = max(1, min(20, int(out.get('ticks', 1))))
+            except (TypeError, ValueError):
+                raise ValueError('scroll ticks must be an integer')
+        elif action in ('press', 'keydown', 'keyup'):
+            key = out.get('key')
+            if not isinstance(key, str) or not key:
+                raise ValueError(f'{action} key required')
+        elif action == 'type':
+            text = out.get('text')
+            if not isinstance(text, str):
+                raise ValueError('type text must be a string')
+            if 'per_char_ms' in out:
+                try:
+                    out['per_char_ms'] = max(0, int(out['per_char_ms']))
+                except (TypeError, ValueError):
+                    raise ValueError('type per_char_ms must be an integer')
+        elif action == 'dwell':
+            try:
+                out['ms'] = max(0, int(out.get('ms', 0)))
+            except (TypeError, ValueError):
+                raise ValueError('dwell ms must be an integer')
+        elif action == 'chord':
+            keys = out.get('keys')
+            if (not isinstance(keys, list)
+                    or not all(isinstance(k, str) and k for k in keys)):
+                raise ValueError('chord keys must be a non-empty string list')
+        elif action not in ('wait_for', 'raw'):
+            raise ValueError(f'unsupported input action: {action}')
+        return out
+
+    async def _send_operator_messages(self, host_id: str, messages: list[dict]):
+        tablet_sock_path = self._resolve_operator_socket(
+            host_id, self._runtime_bases())
+        try:
+            kbd_sock_path = self._resolve_keyboard_socket(
+                host_id, self._runtime_bases())
+        except (FileNotFoundError, KeyError):
+            kbd_sock_path = None
+
+        loop = asyncio.get_event_loop()
+        tablet_sock = None
+        kbd_sock = None
+        sent_tablet = 0
+        sent_keyboard = 0
+        try:
+            tablet_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            tablet_sock.setblocking(False)
+            await loop.sock_connect(tablet_sock, tablet_sock_path)
+
+            if kbd_sock_path is not None:
+                try:
+                    kbd_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                    kbd_sock.setblocking(False)
+                    await loop.sock_connect(kbd_sock, kbd_sock_path)
+                except (OSError, FileNotFoundError):
+                    if kbd_sock is not None:
+                        try:
+                            kbd_sock.close()
+                        except Exception:
+                            pass
+                    kbd_sock = None
+
+            for msg in messages:
+                line = (json.dumps(msg) + '\n').encode()
+                action = msg.get('action')
+                want_tablet, want_kbd = self._route_action(action)
+                if kbd_sock is None and want_kbd:
+                    want_tablet, want_kbd = True, False
+                if want_tablet:
+                    await loop.sock_sendall(tablet_sock, line)
+                    sent_tablet += 1
+                if want_kbd and kbd_sock is not None:
+                    await loop.sock_sendall(kbd_sock, line)
+                    sent_keyboard += 1
+        finally:
+            for s in (tablet_sock, kbd_sock):
+                if s is not None:
+                    try:
+                        s.close()
+                    except Exception:
+                        pass
+
+        return {
+            'tablet_socket': tablet_sock_path,
+            'keyboard_socket': kbd_sock_path if kbd_sock is not None else None,
+            'sent_tablet': sent_tablet,
+            'sent_keyboard': sent_keyboard,
+        }
+
+    @staticmethod
+    def _message_delay_seconds(msg: dict) -> float:
+        """Best-effort wall-clock duration for an OperatorMessage.
+
+        The input daemons pace actions internally, but run-profile owns
+        recording lifetime. Waiting here keeps the recorder open long
+        enough to capture the action that was just enqueued.
+        """
+        if not isinstance(msg, dict):
+            return 0.0
+        action = msg.get('action')
+        try:
+            if action in ('dwell', 'wait_for'):
+                return max(0.0, min(60.0, float(msg.get('ms', 0)) / 1000.0))
+            if action == 'type':
+                text = str(msg.get('text') or '')
+                per = float(msg.get('per_char_ms', 80))
+                return max(0.0, min(60.0, (len(text) * per) / 1000.0))
+            if action == 'move':
+                return max(
+                    0.0,
+                    min(10.0, float(msg.get('duration_ms', 0)) / 1000.0),
+                )
+            if action == 'chord':
+                return max(
+                    0.05,
+                    min(5.0, float(msg.get('hold_ms', 50)) / 1000.0),
+                )
+            if action in ('click', 'press', 'keydown', 'keyup', 'scroll'):
+                return 0.1
+        except (TypeError, ValueError):
+            return 0.0
+        return 0.0
+
+    @staticmethod
+    def _resolve_target_os(
+            host_id: str, override: str | None = None,
+            runtime_bases=None) -> str:
         """Return the normalized target OS for ``host_id``.
 
         Order of precedence:
@@ -807,23 +1164,12 @@ class HumanApi:
         from plugins.human.pyhuman.profile_materializer import normalize_os
         if override:
             return normalize_os(override)
-        pattern = os.path.join(MICROVM_RUNTIME_BASE, f'{host_id}-*')
-        matches = sorted(glob.glob(pattern))
-        exact = os.path.join(MICROVM_RUNTIME_BASE, host_id)
-        if os.path.isdir(exact):
-            matches.append(exact)
-        if not matches:
-            return ''
-        meta_path = os.path.join(matches[0], 'meta.json')
-        try:
-            with open(meta_path) as f:
-                meta = json.load(f)
-        except (OSError, ValueError):
-            return ''
-        return normalize_os(meta.get('os') or meta.get('platform') or '')
+        for _run_dir, meta in _iter_live_microvm_meta(host_id, runtime_bases):
+            return normalize_os(meta.get('os') or meta.get('platform') or '')
+        return ''
 
     @staticmethod
-    def _resolve_operator_socket(host_id: str) -> str:
+    def _resolve_operator_socket(host_id: str, runtime_bases=None) -> str:
         """Find <BASE>/<host_id>-*/meta.json and read input_daemon.operator_socket.
 
         Raises FileNotFoundError if no runtime dir exists for host_id.
@@ -837,58 +1183,47 @@ class HumanApi:
         local path. The downstream caller treats it as a normal AF_UNIX
         path — no other code change needed.
         """
-        pattern = os.path.join(MICROVM_RUNTIME_BASE, f'{host_id}-*')
-        matches = sorted(glob.glob(pattern))
-        # Also accept an exact-match dir (no suffix) for hand-rolled tests.
-        exact = os.path.join(MICROVM_RUNTIME_BASE, host_id)
-        if os.path.isdir(exact):
-            matches.append(exact)
-        if not matches:
-            raise FileNotFoundError(
-                f'no microVM runtime dir for host_id={host_id!r} '
-                f'under {MICROVM_RUNTIME_BASE}')
-        meta_path = os.path.join(matches[0], 'meta.json')
-        if not os.path.isfile(meta_path):
-            raise FileNotFoundError(
-                f'meta.json missing at {meta_path} (host not fully booted?)')
-        try:
-            with open(meta_path) as f:
-                meta = json.load(f)
-        except Exception as e:
-            raise FileNotFoundError(
-                f'failed to parse {meta_path}: {e}') from e
-        idaemon = meta.get('input_daemon') or {}
-        sock_path = idaemon.get('operator_socket')
-        if not sock_path:
-            raise KeyError(
-                f'host {host_id!r} has no GUI session: meta.json has no '
-                f'input_daemon.operator_socket (the vhost-user-input '
-                f'daemon was not started for this microVM)')
+        found_live_meta = False
+        for run_dir, meta in _iter_live_microvm_meta(host_id, runtime_bases):
+            found_live_meta = True
+            idaemon = meta.get('input_daemon') or {}
+            sock_path = idaemon.get('operator_socket')
+            if not sock_path:
+                continue
 
-        # Cloud-carrier dispatch: a `ssh-tunnel://<vm_id>/...` sentinel
-        # path means the operator socket lives in a cloud VM and must
-        # be reached via local-forward.
-        if isinstance(sock_path, str) and sock_path.startswith('ssh-tunnel://'):
-            transport = meta.get('transport') or {}
-            if transport.get('kind') != 'ssh-tunnel':
-                raise KeyError(
-                    f'host {host_id!r} operator_socket has ssh-tunnel:// '
-                    f'sentinel but meta.json transport block is missing '
-                    f'or wrong kind: {transport!r}')
-            if _SSH_TUNNEL_MGR is None:
-                raise RuntimeError(
-                    'SSHTunnelManager not available; cannot resolve '
-                    'cloud-carrier operator socket. Check '
-                    'plugins/human/app/ssh_tunnel.py imports.')
-            handle = _SSH_TUNNEL_MGR.get(host_id)
-            if handle is None:
-                handle = _SSH_TUNNEL_MGR.open_tunnel(transport, host_id)
-            return handle.local_path
+            # Cloud-carrier dispatch: a `ssh-tunnel://<vm_id>/...`
+            # sentinel path means the operator socket lives in a cloud
+            # VM and must be reached via local-forward.
+            if isinstance(sock_path, str) and sock_path.startswith('ssh-tunnel://'):
+                transport = meta.get('transport') or {}
+                if transport.get('kind') != 'ssh-tunnel':
+                    raise KeyError(
+                        f'host {host_id!r} operator_socket has ssh-tunnel:// '
+                        f'sentinel but meta.json transport block is missing '
+                        f'or wrong kind: {transport!r}')
+                if _SSH_TUNNEL_MGR is None:
+                    raise RuntimeError(
+                        'SSHTunnelManager not available; cannot resolve '
+                        'cloud-carrier operator socket. Check '
+                        'plugins/human/app/ssh_tunnel.py imports.')
+                handle = _SSH_TUNNEL_MGR.get(host_id)
+                if handle is None:
+                    handle = _SSH_TUNNEL_MGR.open_tunnel(transport, host_id)
+                return handle.local_path
 
-        return sock_path
+            return sock_path
+
+        if not found_live_meta:
+            raise FileNotFoundError(
+                f'no live microVM runtime dir for host_id={host_id!r} '
+                f'under {_runtime_bases_label(runtime_bases)}')
+        raise KeyError(
+            f'host {host_id!r} has no GUI session: live meta.json has no '
+            f'input_daemon.operator_socket (the vhost-user-input '
+            f'daemon was not started for this microVM)')
 
     @staticmethod
-    def _resolve_keyboard_socket(host_id: str) -> str:
+    def _resolve_keyboard_socket(host_id: str, runtime_bases=None) -> str:
         """Find <BASE>/<host_id>-*/meta.json and read keyboard_daemon.operator_socket.
 
         Sibling of `_resolve_operator_socket`. Mirrors its lookup
@@ -907,56 +1242,46 @@ class HumanApi:
         single-daemon test harnesses working while the keyboard-
         split rolls out.
         """
-        pattern = os.path.join(MICROVM_RUNTIME_BASE, f'{host_id}-*')
-        matches = sorted(glob.glob(pattern))
-        exact = os.path.join(MICROVM_RUNTIME_BASE, host_id)
-        if os.path.isdir(exact):
-            matches.append(exact)
-        if not matches:
-            raise FileNotFoundError(
-                f'no microVM runtime dir for host_id={host_id!r} '
-                f'under {MICROVM_RUNTIME_BASE}')
-        meta_path = os.path.join(matches[0], 'meta.json')
-        if not os.path.isfile(meta_path):
-            raise FileNotFoundError(
-                f'meta.json missing at {meta_path} (host not fully booted?)')
-        try:
-            with open(meta_path) as f:
-                meta = json.load(f)
-        except Exception as e:
-            raise FileNotFoundError(
-                f'failed to parse {meta_path}: {e}') from e
-        kdaemon = meta.get('keyboard_daemon') or {}
-        sock_path = kdaemon.get('operator_socket')
-        if not sock_path:
-            raise KeyError(
-                f'host {host_id!r} has no keyboard_daemon block in '
-                f'meta.json (the Range provider did not spawn the '
-                f'sibling keyboard daemon, or it failed to bind)')
+        found_live_meta = False
+        for _run_dir, meta in _iter_live_microvm_meta(host_id, runtime_bases):
+            found_live_meta = True
+            kdaemon = meta.get('keyboard_daemon') or {}
+            sock_path = kdaemon.get('operator_socket')
+            if not sock_path:
+                continue
 
-        # Cloud-carrier: same ssh-tunnel sentinel as the tablet path.
-        if isinstance(sock_path, str) and sock_path.startswith('ssh-tunnel://'):
-            transport = meta.get('transport') or {}
-            if transport.get('kind') != 'ssh-tunnel':
-                raise KeyError(
-                    f'host {host_id!r} keyboard operator_socket has '
-                    f'ssh-tunnel:// sentinel but meta.json transport '
-                    f'block is missing or wrong kind: {transport!r}')
-            if _SSH_TUNNEL_MGR is None:
-                raise RuntimeError(
-                    'SSHTunnelManager not available; cannot resolve '
-                    'cloud-carrier keyboard operator socket.')
-            # Tunnel handles are keyed per-host; re-use the same handle
-            # for both tablet + keyboard sockets is unsafe (one local
-            # path can't forward two remote UDS), so we key the kbd
-            # tunnel under a sub-id.
-            kbd_handle_id = f'{host_id}::kbd'
-            handle = _SSH_TUNNEL_MGR.get(kbd_handle_id)
-            if handle is None:
-                handle = _SSH_TUNNEL_MGR.open_tunnel(transport, kbd_handle_id)
-            return handle.local_path
+            # Cloud-carrier: same ssh-tunnel sentinel as the tablet path.
+            if isinstance(sock_path, str) and sock_path.startswith('ssh-tunnel://'):
+                transport = meta.get('transport') or {}
+                if transport.get('kind') != 'ssh-tunnel':
+                    raise KeyError(
+                        f'host {host_id!r} keyboard operator_socket has '
+                        f'ssh-tunnel:// sentinel but meta.json transport '
+                        f'block is missing or wrong kind: {transport!r}')
+                if _SSH_TUNNEL_MGR is None:
+                    raise RuntimeError(
+                        'SSHTunnelManager not available; cannot resolve '
+                        'cloud-carrier keyboard operator socket.')
+                # Tunnel handles are keyed per-host; re-use the same
+                # handle for both tablet + keyboard sockets is unsafe
+                # (one local path can't forward two remote UDS), so we
+                # key the kbd tunnel under a sub-id.
+                kbd_handle_id = f'{host_id}::kbd'
+                handle = _SSH_TUNNEL_MGR.get(kbd_handle_id)
+                if handle is None:
+                    handle = _SSH_TUNNEL_MGR.open_tunnel(transport, kbd_handle_id)
+                return handle.local_path
 
-        return sock_path
+            return sock_path
+
+        if not found_live_meta:
+            raise FileNotFoundError(
+                f'no live microVM runtime dir for host_id={host_id!r} '
+                f'under {_runtime_bases_label(runtime_bases)}')
+        raise KeyError(
+            f'host {host_id!r} has no keyboard_daemon block in live '
+            f'meta.json (the Range provider did not spawn the sibling '
+            f'keyboard daemon, or it failed to bind)')
 
     # Action-name → daemon kind. Mirrors profile_materializer.py's
     # output schema. Mouse-style actions fire on the tablet socket;
@@ -991,7 +1316,7 @@ class HumanApi:
         return True, True
 
     @staticmethod
-    def _resolve_vnc_endpoint(host_id: str):
+    def _resolve_vnc_endpoint(host_id: str, runtime_bases=None):
         """Return ``(host, port)`` for the GPU daemon's RFB endpoint.
 
         For local UDS-transport carriers, the GPU daemon listens on
@@ -1005,45 +1330,59 @@ class HumanApi:
         Raises FileNotFoundError / KeyError on the same conditions as
         ``_resolve_operator_socket``.
         """
-        pattern = os.path.join(MICROVM_RUNTIME_BASE, f'{host_id}-*')
-        matches = sorted(glob.glob(pattern))
-        exact = os.path.join(MICROVM_RUNTIME_BASE, host_id)
-        if os.path.isdir(exact):
-            matches.append(exact)
-        if not matches:
+        found_live_meta = False
+        for _run_dir, meta in _iter_live_microvm_meta(host_id, runtime_bases):
+            found_live_meta = True
+            gpu = meta.get('gpu_daemon') or {}
+            vnc_port = gpu.get('vnc_port')
+            if not vnc_port:
+                continue
+
+            transport = meta.get('transport') or {}
+            if transport.get('kind') == 'ssh-tunnel':
+                if _SSH_TUNNEL_MGR is None:
+                    raise RuntimeError(
+                        'SSHTunnelManager not available; cannot resolve '
+                        'cloud-carrier VNC endpoint.')
+                # Reuse an existing tunnel if it's already a TCP one for
+                # this VM; otherwise open a fresh TCP -L for the VNC port.
+                handle = _SSH_TUNNEL_MGR.get(f'{host_id}-vnc')
+                if handle is None:
+                    tcp_transport = dict(transport)
+                    tcp_transport['remote_vnc_port'] = vnc_port
+                    # Drop the UDS field so open_tunnel picks the TCP path.
+                    tcp_transport.pop('remote_input_op_socket', None)
+                    handle = _SSH_TUNNEL_MGR.open_tunnel(
+                        tcp_transport, f'{host_id}-vnc')
+                return ('127.0.0.1', int(handle.local_port))
+
+            return ('127.0.0.1', int(vnc_port))
+
+        if not found_live_meta:
             raise FileNotFoundError(
-                f'no microVM runtime dir for host_id={host_id!r} '
-                f'under {MICROVM_RUNTIME_BASE}')
-        meta_path = os.path.join(matches[0], 'meta.json')
-        with open(meta_path) as f:
-            meta = json.load(f)
-        gpu = meta.get('gpu_daemon') or {}
-        vnc_port = gpu.get('vnc_port')
-        if not vnc_port:
-            raise KeyError(
-                f'host {host_id!r} has no GUI session: meta.json has no '
-                f'gpu_daemon.vnc_port (recording requires the framebuffer '
-                f'daemon to be running)')
+                f'no live microVM runtime dir for host_id={host_id!r} '
+                f'under {_runtime_bases_label(runtime_bases)}')
+        raise KeyError(
+            f'host {host_id!r} has no GUI session: live meta.json has no '
+            f'gpu_daemon.vnc_port (recording requires the framebuffer '
+            f'daemon to be running)')
 
-        transport = meta.get('transport') or {}
-        if transport.get('kind') == 'ssh-tunnel':
-            if _SSH_TUNNEL_MGR is None:
-                raise RuntimeError(
-                    'SSHTunnelManager not available; cannot resolve '
-                    'cloud-carrier VNC endpoint.')
-            # Reuse an existing tunnel if it's already a TCP one for
-            # this VM; otherwise open a fresh TCP -L for the VNC port.
-            handle = _SSH_TUNNEL_MGR.get(f'{host_id}-vnc')
-            if handle is None:
-                tcp_transport = dict(transport)
-                tcp_transport['remote_vnc_port'] = vnc_port
-                # Drop the UDS field so open_tunnel picks the TCP path.
-                tcp_transport.pop('remote_input_op_socket', None)
-                handle = _SSH_TUNNEL_MGR.open_tunnel(
-                    tcp_transport, f'{host_id}-vnc')
-            return ('127.0.0.1', int(handle.local_port))
-
-        return ('127.0.0.1', int(vnc_port))
+    @staticmethod
+    def _resolve_frame_socket(host_id: str, runtime_bases=None) -> str:
+        """Return the microVM special framebuffer UDS for ``host_id``."""
+        found_live_meta = False
+        for _run_dir, meta in _iter_live_microvm_meta(host_id, runtime_bases):
+            found_live_meta = True
+            gpu = meta.get('gpu_daemon') or {}
+            frame_sock = gpu.get('frame_socket')
+            if frame_sock:
+                return frame_sock
+        if not found_live_meta:
+            raise FileNotFoundError(
+                f'no live microVM runtime dir for host_id={host_id!r} '
+                f'under {_runtime_bases_label(runtime_bases)}')
+        raise KeyError(
+            f'host {host_id!r} has no gpu_daemon.frame_socket')
 
     async def api_recordings_index(self, request):
         """Return the catalog of MP4 recordings under ``RECORDINGS_BASE``.

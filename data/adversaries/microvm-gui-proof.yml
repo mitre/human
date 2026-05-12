@@ -1,0 +1,32 @@
+---
+
+- id: microvm-gui-proof
+  name: MicroVM GUI Proof
+  description: |
+    Compact proof profile for GUI microVMs. It moves and clicks the
+    tablet cursor, opens the Windows/Linux command runner with HID
+    keyboard chords, types commands at the caller-selected WPM, and
+    leaves enough dwell time for framebuffer MP4 capture.
+  adversary_persona: microvm-operator
+  duration_estimate_s: 18
+  tags:
+    - benign-human-activity
+    - human-profile
+    - microvm
+    - hid-proof
+  steps:
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 800 } }
+    - { ability: move-cursor-absolute, args: { x: 4096, y: 4096, duration_ms: 700 } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 250 } }
+    - { ability: click-button }
+    - { ability: move-cursor-absolute, args: { x: 28672, y: 24576, duration_ms: 900 } }
+    - { ability: chord-keys, args: { keys: [LeftMeta, r], hold_ms: 70 } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "cmd", per_char_ms: 100 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 900 } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "echo MicroVM GUI proof via special socket", per_char_ms: 100 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 900 } }
+    - { ability: be98ccaa-7bf2-46d0-8731-498028e13591, args: { text: "whoami", per_char_ms: 100 } }
+    - { ability: 04b35c49-430a-4e0e-9757-31ebe4ab90a8 }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 1500 } }

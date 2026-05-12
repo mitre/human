@@ -1,0 +1,80 @@
+[
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftMeta",
+      "r"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 400
+  },
+  {
+    "action": "type",
+    "per_char_ms": 90,
+    "text": "mspaint"
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 4000
+  },
+  {
+    "action": "dwell",
+    "ms": 2000
+  },
+  {
+    "action": "chord",
+    "hold_ms": 80,
+    "keys": [
+      "LeftControl",
+      "s"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "dwell",
+    "ms": 1500
+  },
+  {
+    "action": "type",
+    "per_char_ms": 80,
+    "text": "legacy-paint-canvas"
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 1500
+  },
+  {
+    "action": "chord",
+    "hold_ms": 80,
+    "keys": [
+      "LeftAlt",
+      "F4"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "dwell",
+    "ms": 800
+  }
+]

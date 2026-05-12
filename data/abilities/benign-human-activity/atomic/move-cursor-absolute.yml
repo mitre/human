@@ -1,0 +1,38 @@
+---
+
+- id: move-cursor-absolute
+  name: Move Cursor Absolute
+  description: |
+    Move the HID tablet cursor to an absolute virtio-input coordinate.
+    Used by microVM proof runs where named desktop landmarks may not
+    exist yet, but the special operator socket still needs to show real
+    mouse motion through the guest input stack.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_move_cursor_absolute
+    name: Benign User Activity - Move Cursor Absolute
+  hid:
+    estimated_duration_s: 1
+    requires:
+      - tablet
+      - display
+    args:
+      - name: x
+        type: int
+        default: 16384
+        description: Absolute X coordinate in the tablet range 0-32767.
+      - name: y
+        type: int
+        default: 16384
+        description: Absolute Y coordinate in the tablet range 0-32767.
+      - name: duration_ms
+        type: int
+        default: 500
+        description: Cursor movement duration in milliseconds.
+    steps:
+      - action: move
+        target:
+          x: "{{ args.x }}"
+          y: "{{ args.y }}"
+        duration_ms: "{{ args.duration_ms }}"
+        easing: ease-out

@@ -131,9 +131,11 @@
             </p>
             <p class="is-size-7 mb-1">
               <strong>Endpoint:</strong>
-              <code v-if="selectedHost.vnc_ws">{{ selectedHost.vnc_ws }}</code>
+              <code v-if="selectedHost.session_type === 'gui' && selectedHost.frame_ws">{{ selectedHost.frame_ws }}</code>
+              <code v-else-if="selectedHost.session_type === 'gui' && selectedHost.vnc_ws">{{ selectedHost.vnc_ws }}</code>
+              <code v-else-if="selectedHost.session_type === 'cli' && selectedHost.console_ws">{{ selectedHost.console_ws }}</code>
               <span v-else class="has-text-grey">
-                no <code>vnc_ws</code> registered (stub / non-GUI)
+                no live endpoint registered (stub / unknown session)
               </span>
             </p>
             <p class="is-size-7 has-text-grey">
@@ -152,6 +154,8 @@
       <section class="row-viewer" :class="{ 'is-collapsed': viewerCollapsed }">
         <LiveEndpointViewer
           :vm-name="liveEndpointVmName"
+          :session-type="liveEndpointSessionType"
+          :frame-ws="selectedHost?.frame_ws || ''"
           @update:collapsed="viewerCollapsed = $event"
         >
           <template #header-extra>
@@ -175,7 +179,12 @@
              {host_id, keys: [...], hold_ms: 50}
            Sticky modifiers (Tier 4) layer their key names in front of
            the next chip's key. -->
-      <section v-if="selectedHost" class="row-chord-palette">
+      <!-- Hide keyboard chords for CLI-only hosts: there's no vhost-user-input
+           daemon for session_type=cli microVMs, so the chord-send endpoint
+           backs off with 409 "no GUI session". The xterm.js terminal in
+           LiveEndpointViewer accepts those keystrokes directly (Ctrl+C,
+           Ctrl+L, etc.) — modifiers route through the WebSocket. -->
+      <section v-if="selectedHost && liveEndpointSessionType !== 'cli'" class="row-chord-palette">
         <div class="chord-header is-flex is-align-items-center">
           <h4 class="title is-6 mb-0 mr-3">Keyboard chords</h4>
           <span class="has-text-grey is-size-7 mr-3">
@@ -638,6 +647,15 @@ const liveEndpointVmName = computed(() => {
   const h = selectedHost.value
   if (!h) return ''
   return h.name || h.id || ''
+})
+
+// session_type comes from /plugin/human/api/hosts (human_svc._scan_microvm_meta);
+// 'gui' → noVNC, 'cli' → xterm.js, anything else → stub placeholder.
+// Default to 'gui' for back-compat with pre-cli hosts that may surface
+// no session_type at all (the viewer still has its own stub-probe path).
+const liveEndpointSessionType = computed(() => {
+  const h = selectedHost.value
+  return (h && h.session_type) || 'gui'
 })
 
 // ---- HID step preview ----------------------------------------------------

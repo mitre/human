@@ -56,6 +56,7 @@ def _profile_cache_clear():
 class HumanService(BaseService):
 
     def __init__(self, services):
+        self.services = services
         self.file_svc = services.get('file_svc')
         self.data_svc = services.get('data_svc')
         self.log = self.add_service('human_svc', self)
@@ -117,7 +118,7 @@ class HumanService(BaseService):
             pass
 
         # 2. Scan meta.json files written by the Range provider.
-        hosts = self._scan_microvm_meta()
+        hosts = self._scan_microvm_meta(self._runtime_bases())
         if hosts:
             return {'profile': '(active range)', 'hosts': hosts}
 
@@ -129,8 +130,12 @@ class HumanService(BaseService):
         # users who tried to click the stubs.
         return {'profile': '(no range)', 'hosts': []}
 
+    def _runtime_bases(self):
+        services = getattr(self, 'services', None)
+        return _human_api._configured_runtime_bases(services)
+
     @staticmethod
-    def _scan_microvm_meta():
+    def _scan_microvm_meta(runtime_bases=None):
         """Glob ``<BASE>/*/meta.json`` and return UI-shaped host dicts.
 
         Re-reads ``human_api.MICROVM_RUNTIME_BASE`` on every call so
@@ -146,10 +151,12 @@ class HumanService(BaseService):
         being launched (new file) or an existing meta.json being
         rewritten (mtime bump) invalidates immediately.
         """
-        base = getattr(_human_api, 'MICROVM_RUNTIME_BASE',
-                       '/tmp/timestone-microvms')
-        pattern = os.path.join(base, '*', 'meta.json')
-        paths = sorted(glob.glob(pattern))
+        bases = _human_api._configured_runtime_bases(runtime_bases=runtime_bases)
+        paths = sorted({
+            p
+            for base in bases
+            for p in glob.glob(os.path.join(base, '*', 'meta.json'))
+        })
 
         # Build a fingerprint = tuple of (path, mtime_ns). Stat is
         # much cheaper than open+json.load. If any file vanishes
@@ -160,7 +167,8 @@ class HumanService(BaseService):
             fingerprint = None
 
         now = time.monotonic()
-        cached = _META_CACHE.get((base,))
+        cache_key = tuple(bases)
+        cached = _META_CACHE.get(cache_key)
         if (cached is not None
                 and fingerprint is not None
                 and cached[1] == fingerprint
@@ -178,28 +186,82 @@ class HumanService(BaseService):
                              meta_path, e)
                 continue
             vm_name = meta.get('vm_name')
-            ip = meta.get('ip')
-            if not vm_name or not ip:
-                _log.warning('skipping meta.json at %s: missing required '
-                             'fields (vm_name=%r, ip=%r)',
-                             meta_path, vm_name, ip)
+            ip = meta.get('ip') or ''
+            if not vm_name:
+                _log.warning('skipping meta.json at %s: missing vm_name',
+                             meta_path)
                 continue
-            # Surface a vnc_ws URL when meta.json declares a GPU daemon
-            # with a bound RFB port. The Range plugin's WS proxy
-            # (plugins/range/app/range_vnc_proxy.py) mounts the
-            # forwarder at /plugin/range/api/vnc/<vm_name>/ws and
-            # resolves the backing port from this same meta.json on
-            # every WS upgrade, so handing out the URL whenever a
-            # gpu_daemon block exists is safe — the proxy will 404
-            # cleanly if the daemon dies between inventory and click.
-            # Without this, the Live Endpoint panel renders the
-            # "no vnc_ws registered (stub / non-GUI)" badge even for
-            # fully-GUI-capable microVMs.
+            ch_pid = meta.get('ch_pid') or meta.get('pid')
+            if ch_pid and not HumanService._pid_alive(ch_pid):
+                _log.debug('skipping stale microVM meta at %s: ch_pid=%s',
+                           meta_path, ch_pid)
+                continue
+            # NOTE: empty `ip` is acceptable. CLI VMs talk to the host via
+            # serial.sock (a host-local AF_UNIX socket exposed by the
+            # range_console_proxy); guest-side DHCP failure should NOT
+            # hide the host from the operator's inventory — they still
+            # need the console viewer to debug why DHCP failed.
+            # MicroVMs deliberately do not advertise guest-network
+            # viewer/bootstrap transports. The AE-clean path is host-side only:
+            # Human drives input through operator sockets and control
+            # uses the Range special sockets (Linux vsock, Windows SAC).
+            # GUI framebuffer export is a host-side UDS exposed through
+            # Range's special frame WebSocket, not VNC.
             gpu_daemon = meta.get('gpu_daemon') or {}
-            has_gpu = bool(
-                isinstance(gpu_daemon, dict) and gpu_daemon.get('vnc_port'))
-            vnc_ws = (
-                f'/plugin/range/api/vnc/{vm_name}/ws' if has_gpu else None)
+            has_gpu = isinstance(gpu_daemon, dict) and bool(
+                gpu_daemon.get('socket'))
+            gpu_pid = (
+                gpu_daemon.get('pid')
+                if isinstance(gpu_daemon, dict) else None
+            )
+            if has_gpu and gpu_pid and not HumanService._pid_alive(gpu_pid):
+                _log.debug('ignoring stale GPU daemon for %s: pid=%s',
+                           vm_name, gpu_pid)
+                has_gpu = False
+            frame_sock = (
+                gpu_daemon.get('frame_socket')
+                if has_gpu and isinstance(gpu_daemon, dict) else None
+            )
+            frame_ws = (
+                f'/plugin/range/api/frame/{vm_name}/ws'
+                if frame_sock else None
+            )
+            # Resolve session_type with this precedence:
+            #   1. meta.json's persisted `session_type` (newest writes;
+            #      onprem_microvm_provider now stores the catalog value
+            #      for both Linux + Windows spawns).
+            #   2. presence of a future frame_ws stream → 'gui'.
+            #   3. presence of a vsock.sock / serial.sock sibling in the
+            #      run_dir → 'cli'. This covers microVMs spawned BEFORE
+            #      meta.json carried session_type (the already-running
+            #      linux-nogui at install time) so the operator doesn't
+            #      have to redeploy to get the xterm.js viewer.
+            #   4. fallback 'shell' (= unknown stub).
+            persisted_st = (meta.get('session_type') or '').lower()
+            if persisted_st:
+                session_type = persisted_st
+                if session_type == 'gui' and not frame_ws:
+                    session_type = 'shell'
+            elif has_gpu and frame_ws:
+                session_type = 'gui'
+            else:
+                # CLI fallback only when there is a serial.sock — vsock.sock
+                # is the timestone-shim RPC channel and is NOT a tty, so it
+                # must not light up an xterm.js viewer. Without this gate
+                # legacy/no-session_type images (e.g. timestone-linux-victim)
+                # render as 'cli' but the console proxy 404s, leaving the
+                # operator with a permanently-spinning viewer.
+                run_dir = os.path.dirname(meta_path)
+                if os.path.exists(os.path.join(run_dir, 'serial.sock')):
+                    session_type = 'cli'
+                else:
+                    session_type = 'shell'
+            # Console WS URL — populated for cli hosts so the frontend
+            # can mount xterm.js without re-deriving the route. Served
+            # by plugins/range/app/range_console_proxy.py.
+            console_ws = (
+                f'/plugin/range/onprem/console/{vm_name}'
+                if session_type == 'cli' else None)
             out.append({
                 'id':           vm_name,
                 'name':         vm_name,
@@ -207,17 +269,31 @@ class HumanService(BaseService):
                 'os':           meta.get('os', 'unknown'),
                 'status':       'running',
                 'provider':     'microvm',
-                'vnc_ws':       vnc_ws,
-                # Surface a coarse session_type tag so the frontend can
-                # distinguish a GUI-capable host (gpu_daemon present)
-                # from a shell-only stub. Mirrors the contract used by
-                # the Range plugin internally.
-                'session_type': 'gui' if has_gpu else 'shell',
+                'frame_ws':     frame_ws,
+                'special_socket': (
+                    frame_sock or (
+                        gpu_daemon.get('socket')
+                        if has_gpu and isinstance(gpu_daemon, dict) else None
+                    )
+                ),
+                'console_ws':   console_ws,
+                # Surface session_type so the frontend (LiveEndpointViewer)
+                # can pick between a special-socket framebuffer (gui)
+                # and xterm.js (cli) without an extra round-trip. 'shell'
+                # is the legacy stub label.
+                'session_type': session_type,
             })
 
         if fingerprint is not None:
-            _META_CACHE[(base,)] = (now, fingerprint, out)
+            _META_CACHE[cache_key] = (now, fingerprint, out)
         return out
+
+    @staticmethod
+    def _pid_alive(pid):
+        try:
+            return os.path.exists(f'/proc/{int(pid)}')
+        except Exception:
+            return False
 
     async def list_live_workflows(self):
         """Return workflows that the control_server can execute.
@@ -418,4 +494,3 @@ class HumanService(BaseService):
             await self.data_svc.store(Workflow(name=workflow_name, description=workflow_description, file=workflow_file))
         except Exception as e:
             self.log.error('Error loading extension=%s, %s' % (module_path, e))
-

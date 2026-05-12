@@ -2,26 +2,35 @@
   <!--
     LiveEndpointViewer (Human plugin)
 
-    Embeds a noVNC RFB client pointed at a per-VM `vhost-user-gpu-2d`
-    daemon via the same-origin WebSocket proxy mounted by the Range plugin:
+    Two viewers behind one scaffold. Branch on `session_type`:
 
-      wss://<caldera-host>/plugin/range/api/vnc/<vmName>/ws
+      session_type === 'gui'  → noVNC RFB client pointed at the per-VM
+        `vhost-user-gpu-2d` daemon via the Range plugin's framebuffer
+        WS proxy:
+          wss://<caldera-host>/plugin/range/api/vnc/<vmName>/ws
 
-    Mirrors plugins/range/gui/components/WorkstationViewer.vue but renders
-    inline (no modal), sized to fill the available area in its container,
-    constrained to a 16:9 aspect ratio (monitor-shaped) targeting 1280x720
-    native. View-only — input flows from the Human plugin's profile
-    runner via the operator UDS, not the operator's keyboard/mouse.
+      session_type === 'cli'  → xterm.js terminal pumped through the
+        Range plugin's UDS console proxy:
+          wss://<caldera-host>/plugin/range/onprem/console/<vmName>
+        (Linux microvm → vsock.sock; Windows microvm → serial.sock.
+        Selection happens server-side in range_console_proxy.py.)
 
-    NOTE: the gpu daemon's framebuffer is currently 1024x768 (4:3). The
-    16:9 frame here will letterbox the 4:3 framebuffer with black bars
-    on the sides. A follow-up should change the daemon's --geometry to
-    1280x720 for an exact match (also touches the post-spawn driver
-    install + a Range catalog tweak).
+    Same outer scaffold for both: collapse chevron, status pill,
+    retry button, "Connecting / reconnecting (N/8)" overlay. Operator
+    sees one familiar UI regardless of which transport is in play.
 
-    A 404 from the WS proxy (host has no GUI session — host-stub-1 etc)
-    is surfaced as a "stub mode" placeholder rather than an endless retry
-    loop.
+    GUI branch: 16:9 viewport (monitor-shaped). Framebuffer is
+    1024x768 (4:3) today — letterboxed inside the 16:9 frame. View-
+    only; input flows from the Human plugin's profile runner via the
+    operator UDS, not the operator's keyboard/mouse.
+
+    CLI branch: full-rect xterm.js (no aspect lock — terminals don't
+    care). Operator keystrokes ARE forwarded (typing into the terminal
+    is the supported input path for cli hosts; R4 still applies — no
+    in-guest agent, just bytes over the serial/vsock UDS).
+
+    A 404 from the WS proxy (host has no GUI/CLI session) is surfaced
+    as a "stub mode" placeholder rather than an endless retry loop.
   -->
   <div class="live-endpoint" :class="{ 'is-collapsed': collapsed }">
     <div class="endpoint-header">
@@ -41,6 +50,13 @@
         <slot name="header-extra" />
       </h3>
       <div class="endpoint-header-actions">
+        <span
+          v-if="inputStatus"
+          class="tag is-small mr-2"
+          :class="inputStatusClass"
+        >
+          {{ inputStatus }}
+        </span>
         <button
           v-if="vmName && (state === 'failed' || state === 'stub' || retriesExhausted)"
           class="button is-dark is-small mr-2"
@@ -69,13 +85,15 @@
       </div>
     </div>
 
-    <!-- 16:9 aspect-ratio viewport (monitor-shaped). The canvas auto-fills
-         via :deep(canvas). v-show (not v-if) so the noVNC RFB instance &
-         WebSocket stay alive when the section is collapsed. -->
+    <!-- Viewport. v-show (not v-if) so the noVNC RFB / xterm.js
+         instance + WebSocket stay alive when the section is collapsed.
+         The GUI branch wraps its child in a 16:9 monitor-shaped
+         aspect frame; the CLI branch fills the whole rect (terminals
+         resize cleanly). -->
     <div class="viewport-frame" v-show="!collapsed">
-      <div class="viewport-aspect">
+      <div :class="isCli ? 'viewport-fullrect' : 'viewport-aspect'">
         <!-- No host selected: pure CSS placeholder; component does NOT
-             attempt to instantiate RFB until vmName is non-empty. -->
+             attempt to instantiate RFB/xterm until vmName is non-empty. -->
         <div v-if="!vmName" class="viewport-placeholder">
           <span class="icon is-large has-text-grey">
             <i class="fas fa-desktop fa-2x"></i>
@@ -85,16 +103,17 @@
           </p>
         </div>
 
-        <!-- Stub mode: server returned 404 / host has no framebuffer. -->
+        <!-- Stub mode: server returned 404 / host has no live session. -->
         <div v-else-if="state === 'stub'" class="viewport-placeholder">
           <span class="icon is-large has-text-grey-light">
             <i class="fas fa-terminal fa-2x"></i>
           </span>
           <p class="mt-3 has-text-grey-light">
-            <strong>{{ vmName }}</strong> has no live framebuffer.
+            <strong>{{ vmName }}</strong> has no live
+            {{ isCli ? 'console' : 'framebuffer' }}.
           </p>
           <p class="is-size-7 has-text-grey mt-1">
-            Using stub / command-line mode for this host.
+            Using stub mode for this host.
           </p>
         </div>
 
@@ -107,7 +126,8 @@
             <i class="fas fa-spinner fa-spin fa-2x"></i>
           </span>
           <p class="mt-3 has-text-white">
-            Connecting to {{ vmName }}
+            Connecting to VM {{ isCli ? 'console' : 'display' }}
+            ({{ vmName }})
             <span v-if="retryAttempt > 0">
               (retry {{ retryAttempt }} / {{ MAX_RETRIES }})
             </span>
@@ -126,13 +146,31 @@
           <p class="mt-3 has-text-white">{{ errorMessage }}</p>
         </div>
 
-        <!-- noVNC mounts its <canvas> as a child of this div on connect.
-             We only mount this div when vmName is set so RFB never
-             constructs against an empty target. -->
+        <!-- GUI branch: microVM frame sockets render into our canvas.
+             Legacy RFB/noVNC hosts still mount noVNC into the div. -->
+        <canvas
+          v-if="vmName && isFrameTransport && state !== 'stub'"
+          ref="frameCanvas"
+          class="frame-screen"
+          tabindex="0"
+          @pointermove="onFramePointerMove"
+          @pointerdown="onFramePointerDown"
+          @wheel="onFrameWheel"
+          @keydown="onFrameKeyDown"
+          @contextmenu.prevent
+        ></canvas>
         <div
-          v-if="vmName && state !== 'stub'"
+          v-if="vmName && !isCli && !isFrameTransport && state !== 'stub'"
           ref="screen"
           class="vnc-screen"
+        ></div>
+
+        <!-- CLI branch: xterm.js mounts its terminal DOM as a child
+             of this div. Same lifecycle gate as the GUI branch. -->
+        <div
+          v-if="vmName && isCli && state !== 'stub'"
+          ref="termHost"
+          class="term-host"
         ></div>
       </div>
     </div>
@@ -144,7 +182,14 @@ import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 
 const props = defineProps({
   vmName: { type: String, default: '' },
+  frameWs: { type: String, default: '' },
+  // 'gui' → noVNC; 'cli' → xterm.js. Anything else falls through
+  // to the GUI branch (back-compat: pre-cli hosts surface no value).
+  sessionType: { type: String, default: 'gui' },
 })
+
+const isCli = computed(() => props.sessionType === 'cli')
+const isFrameTransport = computed(() => !isCli.value && !!props.frameWs)
 
 // Notify the parent when the operator collapses/expands the section so
 // the page-level grid can redistribute vertical space (give the freed
@@ -155,6 +200,7 @@ const emit = defineEmits(['update:collapsed'])
 const state = ref('idle')
 const errorMessage = ref('')
 const retryAttempt = ref(0)
+const inputStatus = ref('')
 const screen = ref(null)
 
 // Section collapse state. Session-only (no localStorage). The viewer body
@@ -175,8 +221,28 @@ const MAX_RETRIES = 8
 const RETRY_BACKOFFS_MS = [500, 1000, 2000, 4000, 8000, 8000, 8000, 8000]
 
 let rfb = null
+let frameWs = null
 let retryTimer = null
 let cancelled = false
+
+// CLI branch state. `term` is the xterm.js Terminal instance; `fit`
+// is the FitAddon (auto-size terminal cols/rows to its container);
+// `termWs` is the WebSocket to the console proxy; `termHost` is the
+// ref to the <div> xterm mounts inside; `resizeObs` is the
+// ResizeObserver that calls fit.fit() when the container changes
+// size. All four nulled out in teardown().
+let term = null
+let fit = null
+let termWs = null
+const termHost = ref(null)
+const frameCanvas = ref(null)
+let resizeObs = null
+let lastFramePointerMoveAt = 0
+let framePointerMoveInFlight = false
+let pendingFramePointerMove = null
+let framePointerMoveTimer = null
+const FRAME_POINTER_MOVE_INTERVAL_MS = 20
+const TABLET_ABS_MAX = 32767
 
 const retriesExhausted = computed(() => retryAttempt.value >= MAX_RETRIES)
 
@@ -208,28 +274,50 @@ const statusTagClass = computed(() => ({
 }))
 
 const statusTitle = computed(() => errorMessage.value || statusLabel.value)
+const inputStatusClass = computed(() => ({
+  'is-info': inputStatus.value === 'input sent',
+  'is-warning': inputStatus.value === 'input pending',
+  'is-danger': inputStatus.value === 'input failed',
+}))
 
 function vncWsUrl(vm) {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${proto}//${window.location.host}/plugin/range/api/vnc/${encodeURIComponent(vm)}/ws`
 }
 
+// Console (cli) WS URL — symmetric with vncWsUrl. Served by
+// plugins/range/app/range_console_proxy.py; routes to the per-VM
+// vsock.sock (linux) or serial.sock (windows) on the host side.
+function consoleWsUrl(vm) {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${proto}//${window.location.host}/plugin/range/onprem/console/${encodeURIComponent(vm)}`
+}
+
+function frameWsUrl(vm) {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const path = props.frameWs || `/plugin/range/api/frame/${encodeURIComponent(vm)}/ws`
+  if (path.startsWith('ws://') || path.startsWith('wss://')) return path
+  return `${proto}//${window.location.host}${path}`
+}
+
 // Probe the proxy with a HEAD/GET on the ws upgrade URL re-cast to https
-// to detect "host has no framebuffer" (404) cheaply, before opening RFB.
-// The Range proxy returns 404 on the GET path for unknown VMs; the WS
-// upgrade path itself returns the same 404 status to a non-WS request.
+// to detect "host has no live session" (404) cheaply, before opening
+// RFB/xterm. Both proxies return 404 for unknown VMs and 426 ("upgrade
+// required") on plain-HTTP GET against a known VM — 426 is the happy
+// path; it means the proxy IS willing to upgrade to WS.
 async function probeStubMode(vm) {
   try {
-    const probeUrl = `/plugin/range/api/vnc/${encodeURIComponent(vm)}/ws`
+    const probeUrl = isCli.value
+      ? `/plugin/range/onprem/console/${encodeURIComponent(vm)}`
+      : (isFrameTransport.value
+          ? (props.frameWs || `/plugin/range/api/frame/${encodeURIComponent(vm)}/ws`)
+          : `/plugin/range/api/vnc/${encodeURIComponent(vm)}/ws`)
     const res = await fetch(probeUrl, { method: 'GET', credentials: 'same-origin' })
-    // 404 -> stub. 400/426 ("upgrade required") means the proxy IS willing
-    // to talk to us about this VM, just not over plain HTTP — that's the
-    // happy path; it'll accept the WS upgrade.
     if (res.status === 404) return true
     return false
   } catch (_err) {
-    // Network errors fall through to the RFB connect, which has its own
-    // retry / failure handling.
+    // Network errors fall through to the connect path, which has its
+    // own retry / failure handling.
     return false
   }
 }
@@ -240,7 +328,8 @@ async function connect() {
   errorMessage.value = ''
   cancelled = false
 
-  // Cheap server-side probe first: skip noVNC entirely for stub hosts.
+  // Cheap server-side probe first: skip noVNC / xterm entirely for
+  // stub hosts. Same shape either way; the probe URL flips on isCli.
   const isStub = await probeStubMode(props.vmName)
   if (cancelled) return
   if (isStub) {
@@ -248,6 +337,45 @@ async function connect() {
     return
   }
 
+  // Dispatch to the right transport. The outer scaffold (status pill,
+  // retry button, connecting overlay) is shared; only the inner
+  // rendering + WS wiring differ.
+  if (isCli.value) {
+    await connectCli()
+  } else if (isFrameTransport.value) {
+    await connectFrame()
+  } else {
+    await connectGui()
+  }
+}
+
+async function connectFrame() {
+  await nextTick()
+  if (cancelled) return
+  if (!frameCanvas.value) {
+    state.value = 'failed'
+    errorMessage.value = 'Internal error: frame canvas missing.'
+    return
+  }
+
+  const url = frameWsUrl(props.vmName)
+  try {
+    frameWs = new WebSocket(url)
+    frameWs.binaryType = 'arraybuffer'
+  } catch (err) {
+    console.error('[live-endpoint] frame WS construct failed', err)
+    state.value = 'failed'
+    errorMessage.value = 'Failed to open frame WebSocket.'
+    return
+  }
+
+  frameWs.addEventListener('open', onFrameWsOpen)
+  frameWs.addEventListener('message', onFrameWsMessage)
+  frameWs.addEventListener('close', onFrameWsClose)
+  frameWs.addEventListener('error', onFrameWsError)
+}
+
+async function connectGui() {
   let RFB
   try {
     const mod = await import(
@@ -290,6 +418,361 @@ async function connect() {
   rfb.addEventListener('connect', onRfbConnect)
   rfb.addEventListener('disconnect', onRfbDisconnect)
   rfb.addEventListener('securityfailure', onRfbSecurityFailure)
+}
+
+// Lazy-load xterm.css the first time the CLI branch runs. The
+// stylesheet is vendored under /plugin/range/gui/static/xterm/ along
+// with the JS. We append it to <head> once; subsequent calls no-op.
+function ensureXtermCss() {
+  const href = '/plugin/range/gui/static/xterm/xterm.css'
+  if (document.querySelector(`link[data-xterm="1"]`)) return
+  const link = document.createElement('link')
+  link.rel = 'stylesheet'
+  link.href = href
+  link.dataset.xterm = '1'
+  document.head.appendChild(link)
+}
+
+async function connectCli() {
+  // The vendored xterm.js + xterm-addon-fit are plain UMD bundles
+  // (not ES modules). Inject them via <script> tags so they register
+  // their globals (window.Terminal, window.FitAddon) without the
+  // dynamic-import "Failed to parse module specifier" trap.
+  ensureXtermCss()
+  try {
+    await loadGlobalScriptOnce(
+      '/plugin/range/gui/static/xterm/xterm.js',
+      'Terminal'
+    )
+    await loadGlobalScriptOnce(
+      '/plugin/range/gui/static/xterm/xterm-addon-fit.min.js',
+      'FitAddon'
+    )
+  } catch (err) {
+    console.error('[live-endpoint] failed to load xterm.js', err)
+    state.value = 'failed'
+    errorMessage.value = 'Failed to load xterm.js client library.'
+    return
+  }
+
+  await nextTick()
+  if (cancelled) return
+  if (!termHost.value) {
+    state.value = 'failed'
+    errorMessage.value = 'Internal error: terminal container missing.'
+    return
+  }
+
+  // Wipe any prior xterm DOM (a reconnect after disconnect re-enters
+  // this function and we don't want stacked terminal divs).
+  termHost.value.innerHTML = ''
+
+  try {
+    const Terminal = window.Terminal
+    const FitAddon = window.FitAddon && window.FitAddon.FitAddon
+    term = new Terminal({
+      cursorBlink: true,
+      fontSize: 13,
+      theme: { background: '#000000', foreground: '#e6e6e6' },
+      convertEol: false,
+    })
+    if (FitAddon) {
+      fit = new FitAddon()
+      term.loadAddon(fit)
+    }
+    term.open(termHost.value)
+    if (fit) {
+      try { fit.fit() } catch (_e) { /* container may still be 0×0 */ }
+    }
+  } catch (err) {
+    console.error('[live-endpoint] xterm constructor threw', err)
+    state.value = 'failed'
+    errorMessage.value = 'Failed to construct xterm.js terminal.'
+    return
+  }
+
+  // Auto-refit on container size changes (e.g. operator collapses
+  // another section and ours grows). xterm.js needs an explicit
+  // fit() call to recompute cols/rows; without it the terminal sits
+  // at its initial dimensions even though the DOM grew.
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObs = new ResizeObserver(() => {
+      try { if (fit) fit.fit() } catch (_e) { /* ignore transient 0×0 */ }
+    })
+    resizeObs.observe(termHost.value)
+  }
+
+  // Open the WS and wire input/output.
+  const url = consoleWsUrl(props.vmName)
+  try {
+    termWs = new WebSocket(url)
+    termWs.binaryType = 'arraybuffer'
+  } catch (err) {
+    console.error('[live-endpoint] console WS construct failed', err)
+    state.value = 'failed'
+    errorMessage.value = 'Failed to open console WebSocket.'
+    return
+  }
+
+  termWs.addEventListener('open', onTermWsOpen)
+  termWs.addEventListener('message', onTermWsMessage)
+  termWs.addEventListener('close', onTermWsClose)
+  termWs.addEventListener('error', onTermWsError)
+
+  // Every keystroke from xterm.js → WS. xterm gives us the raw
+  // sequence (e.g. "\x1b[A" for arrow-up); we just forward bytes.
+  term.onData((data) => {
+    if (termWs && termWs.readyState === WebSocket.OPEN) {
+      termWs.send(data)
+    }
+  })
+}
+
+// ---- xterm.js script-loader -------------------------------------------------
+// Tiny, idempotent <script src="…"> loader keyed on a window global.
+// Multiple LiveEndpointViewer mounts (operator flips between hosts)
+// must not re-inject the script tag each time, and must wait for the
+// global to appear before the second caller continues.
+const _xtermScriptPromises = new Map()
+function loadGlobalScriptOnce(src, globalName) {
+  if (window[globalName]) return Promise.resolve()
+  if (_xtermScriptPromises.has(src)) return _xtermScriptPromises.get(src)
+  const p = new Promise((resolve, reject) => {
+    const tag = document.createElement('script')
+    tag.src = src
+    tag.async = true
+    tag.onload = () => {
+      if (window[globalName]) resolve()
+      else reject(new Error(`script ${src} loaded but ${globalName} undefined`))
+    }
+    tag.onerror = () => reject(new Error(`script load failed: ${src}`))
+    document.head.appendChild(tag)
+  })
+  _xtermScriptPromises.set(src, p)
+  return p
+}
+
+function onTermWsOpen() {
+  state.value = 'connected'
+  retryAttempt.value = 0
+  errorMessage.value = ''
+  // Nudge the guest with a newline so an idle agetty re-prints its
+  // login prompt; otherwise the operator sees a blank black square
+  // until they type something.
+  try {
+    if (termWs && termWs.readyState === WebSocket.OPEN) termWs.send('\r')
+  } catch (_e) { /* best-effort */ }
+}
+
+function onTermWsMessage(ev) {
+  if (!term) return
+  const data = ev.data
+  if (data instanceof ArrayBuffer) {
+    // Binary frames from the proxy → write bytes verbatim.
+    term.write(new Uint8Array(data))
+  } else if (typeof data === 'string') {
+    term.write(data)
+  } else if (data && typeof data.text === 'function') {
+    // Blob (some browsers); decode async.
+    data.text().then((s) => { if (term) term.write(s) })
+  }
+}
+
+function onTermWsClose(ev) {
+  if (cancelled) {
+    state.value = 'idle'
+    return
+  }
+  if (retryAttempt.value < MAX_RETRIES) {
+    state.value = 'connecting'
+  } else {
+    state.value = 'disconnected'
+  }
+  errorMessage.value = ev && ev.wasClean
+    ? 'Console disconnected.'
+    : 'Console disconnected unexpectedly.'
+  scheduleRetry()
+}
+
+function onTermWsError(ev) {
+  console.warn('[live-endpoint] console WS error', ev)
+  // Don't flip to 'failed' here — onTermWsClose runs right after and
+  // owns the retry decision. Just record a friendlier message.
+  errorMessage.value = 'Console WebSocket error.'
+}
+
+function onFrameWsOpen() {
+  state.value = 'connected'
+  retryAttempt.value = 0
+  errorMessage.value = ''
+}
+
+function onFrameWsMessage(ev) {
+  const canvas = frameCanvas.value
+  if (!canvas || !(ev.data instanceof ArrayBuffer)) return
+  const buf = ev.data
+  if (buf.byteLength < 24) return
+  const magic = String.fromCharCode(...new Uint8Array(buf, 0, 4))
+  if (magic !== 'TSFB') return
+  const view = new DataView(buf)
+  const w = view.getUint32(4, true)
+  const h = view.getUint32(8, true)
+  const len = view.getUint32(20, true)
+  if (!w || !h || len !== w * h * 4 || buf.byteLength < 24 + len) return
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w
+    canvas.height = h
+  }
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  const pixels = new Uint8ClampedArray(buf, 24, len)
+  ctx.putImageData(new ImageData(pixels, w, h), 0, 0)
+}
+
+function frameCanvasPoint(ev) {
+  const canvas = frameCanvas.value
+  if (!canvas) return null
+  const rect = canvas.getBoundingClientRect()
+  if (!rect.width || !rect.height) return null
+  return {
+    x: Math.max(0, Math.min(TABLET_ABS_MAX, Math.round(((ev.clientX - rect.left) / rect.width) * TABLET_ABS_MAX))),
+    y: Math.max(0, Math.min(TABLET_ABS_MAX, Math.round(((ev.clientY - rect.top) / rect.height) * TABLET_ABS_MAX))),
+  }
+}
+
+async function sendFrameInput(messages, options = {}) {
+  if (!props.vmName || !messages.length) return
+  if (!options.quiet) inputStatus.value = 'input pending'
+  try {
+    const res = await fetch('/plugin/human/api/input', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        host_id: props.vmName,
+        messages,
+      }),
+    })
+    if (!options.quiet || !res.ok) {
+      inputStatus.value = res.ok ? 'input sent' : 'input failed'
+    }
+  } catch (err) {
+    console.warn('[live-endpoint] frame input failed', err)
+    inputStatus.value = 'input failed'
+  }
+}
+
+function flushFramePointerMove() {
+  if (framePointerMoveInFlight || !pendingFramePointerMove || state.value !== 'connected') return
+  const now = performance.now()
+  const waitMs = Math.max(0, FRAME_POINTER_MOVE_INTERVAL_MS - (now - lastFramePointerMoveAt))
+  if (waitMs > 0) {
+    if (!framePointerMoveTimer) {
+      framePointerMoveTimer = setTimeout(() => {
+        framePointerMoveTimer = null
+        flushFramePointerMove()
+      }, waitMs)
+    }
+    return
+  }
+
+  const message = pendingFramePointerMove
+  pendingFramePointerMove = null
+  framePointerMoveInFlight = true
+  lastFramePointerMoveAt = now
+  sendFrameInput([message], { quiet: true }).finally(() => {
+    framePointerMoveInFlight = false
+    flushFramePointerMove()
+  })
+}
+
+function onFramePointerMove(ev) {
+  if (state.value !== 'connected') return
+  const point = frameCanvasPoint(ev)
+  if (!point) return
+  pendingFramePointerMove = {
+    action: 'move',
+    target: { kind: 'abs', x: point.x, y: point.y },
+    duration_ms: 0,
+  }
+  flushFramePointerMove()
+}
+
+function onFramePointerDown(ev) {
+  if (state.value !== 'connected') return
+  frameCanvas.value?.focus()
+  const point = frameCanvasPoint(ev)
+  if (!point) return
+  pendingFramePointerMove = null
+  const button = ev.button === 2 ? 'right' : ev.button === 1 ? 'middle' : 'left'
+  sendFrameInput([
+    { action: 'move', target: { kind: 'abs', x: point.x, y: point.y }, duration_ms: 0 },
+    { action: 'click', button, count: 1 },
+  ])
+}
+
+function onFrameWheel(ev) {
+  if (state.value !== 'connected') return
+  ev.preventDefault()
+  const direction = ev.deltaY < 0 ? 'up' : 'down'
+  const ticks = Math.max(1, Math.min(8, Math.round(Math.abs(ev.deltaY) / 100) || 1))
+  sendFrameInput([{ action: 'scroll', direction, ticks }])
+}
+
+function frameKeyName(ev) {
+  const special = {
+    ArrowUp: 'up',
+    ArrowDown: 'down',
+    ArrowLeft: 'left',
+    ArrowRight: 'right',
+    Enter: 'enter',
+    Escape: 'esc',
+    Backspace: 'backspace',
+    Tab: 'tab',
+    Delete: 'delete',
+    Home: 'home',
+    End: 'end',
+    PageUp: 'pageup',
+    PageDown: 'pagedown',
+    ' ': 'space',
+  }
+  return special[ev.key] || ev.key
+}
+
+function onFrameKeyDown(ev) {
+  if (state.value !== 'connected') return
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return
+  if (ev.key.length === 1) {
+    ev.preventDefault()
+    sendFrameInput([{ action: 'type', text: ev.key }])
+    return
+  }
+  const key = frameKeyName(ev)
+  if (key) {
+    ev.preventDefault()
+    sendFrameInput([{ action: 'press', key }])
+  }
+}
+
+function onFrameWsClose(ev) {
+  if (cancelled) {
+    state.value = 'idle'
+    return
+  }
+  if (retryAttempt.value < MAX_RETRIES) {
+    state.value = 'connecting'
+  } else {
+    state.value = 'disconnected'
+  }
+  errorMessage.value = ev && ev.wasClean
+    ? 'Frame stream disconnected.'
+    : 'Frame stream disconnected unexpectedly.'
+  scheduleRetry()
+}
+
+function onFrameWsError(ev) {
+  console.warn('[live-endpoint] frame WS error', ev)
+  errorMessage.value = 'Frame WebSocket error.'
 }
 
 function onRfbConnect() {
@@ -356,6 +839,25 @@ function teardown() {
     clearTimeout(retryTimer)
     retryTimer = null
   }
+  if (framePointerMoveTimer) {
+    clearTimeout(framePointerMoveTimer)
+    framePointerMoveTimer = null
+  }
+  pendingFramePointerMove = null
+  framePointerMoveInFlight = false
+  // GUI branch teardown
+  if (frameWs) {
+    try {
+      frameWs.removeEventListener('open', onFrameWsOpen)
+      frameWs.removeEventListener('message', onFrameWsMessage)
+      frameWs.removeEventListener('close', onFrameWsClose)
+      frameWs.removeEventListener('error', onFrameWsError)
+      frameWs.close()
+    } catch (err) {
+      console.warn('[live-endpoint] teardown: frameWs.close threw', err)
+    }
+    frameWs = null
+  }
   if (rfb) {
     try {
       rfb.removeEventListener('connect', onRfbConnect)
@@ -367,25 +869,52 @@ function teardown() {
     }
     rfb = null
   }
+  // CLI branch teardown
+  if (termWs) {
+    try {
+      termWs.removeEventListener('open', onTermWsOpen)
+      termWs.removeEventListener('message', onTermWsMessage)
+      termWs.removeEventListener('close', onTermWsClose)
+      termWs.removeEventListener('error', onTermWsError)
+      // close() is a no-op if already closed; safe to call.
+      termWs.close()
+    } catch (err) {
+      console.warn('[live-endpoint] teardown: termWs.close threw', err)
+    }
+    termWs = null
+  }
+  if (resizeObs) {
+    try { resizeObs.disconnect() } catch (_e) { /* ignore */ }
+    resizeObs = null
+  }
+  if (term) {
+    try { term.dispose() } catch (_e) { /* ignore */ }
+    term = null
+    fit = null
+  }
   state.value = 'idle'
   retryAttempt.value = 0
   errorMessage.value = ''
+  inputStatus.value = ''
 }
 
-// Reconnect to a different host whenever vmName changes. teardown() flips
-// `cancelled = true`, so we must reset it before kicking off `connect()`.
+// Reconnect to a different host whenever vmName OR sessionType changes
+// (the latter so e.g. switching from a gui host to a cli host on the
+// same component instance flips transports cleanly). teardown() sets
+// `cancelled = true`, so we don't reset it explicitly — connect()
+// does that on entry.
 watch(
-  () => props.vmName,
-  (next, prev) => {
-    if (prev) teardown()
-    if (next) connect()
+  () => [props.vmName, props.sessionType, props.frameWs],
+  ([nextVm], [prevVm] = [null]) => {
+    if (prevVm) teardown()
+    if (nextVm) connect()
   },
   { immediate: true }
 )
 
 onBeforeUnmount(teardown)
 
-defineExpose({ vncWsUrl, MAX_RETRIES, RETRY_BACKOFFS_MS })
+defineExpose({ vncWsUrl, consoleWsUrl, frameWsUrl, MAX_RETRIES, RETRY_BACKOFFS_MS })
 </script>
 
 <style scoped>
@@ -481,10 +1010,44 @@ defineExpose({ vncWsUrl, MAX_RETRIES, RETRY_BACKOFFS_MS })
   height: 100%;
 }
 
+.frame-screen {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: auto;
+  background: #000;
+}
+
 .vnc-screen :deep(canvas) {
   width: 100% !important;
   height: 100% !important;
   display: block;
+}
+
+/* CLI branch: terminals don't have a meaningful aspect ratio — fill
+   the whole viewport rect, no monitor-shaped letterbox. */
+.viewport-fullrect {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.term-host {
+  width: 100%;
+  height: 100%;
+}
+
+/* xterm.js injects a .xterm wrapper inside our host div. Force it
+   to fill so cols/rows track the container, and recolor the
+   default background to true black (matches the surrounding
+   .viewport-frame). */
+.term-host :deep(.xterm),
+.term-host :deep(.xterm-viewport),
+.term-host :deep(.xterm-screen) {
+  width: 100% !important;
+  height: 100% !important;
+  background-color: #000 !important;
 }
 
 .viewport-placeholder,

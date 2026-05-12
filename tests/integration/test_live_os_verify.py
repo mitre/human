@@ -247,7 +247,7 @@ def test_live_os_verify(host_stem):
     fb_cy = h // 2
     tablet_messages = [
         {"action": "move",
-         "target": {"kind": "absolute", "x": fb_cx, "y": fb_cy},
+         "target": {"kind": "abs", "x": fb_cx, "y": fb_cy},
          "duration_ms": 0},
         {"action": "click", "button": "left"},
     ]

@@ -38,6 +38,7 @@ async def enable(services):
     app.router.add_route('GET',  '/plugin/human/api/hosts',     human_api.api_hosts)
     app.router.add_route('GET',  '/plugin/human/api/workflows', human_api.api_workflows)
     app.router.add_route('POST', '/plugin/human/api/run',       human_api.api_run)
+    app.router.add_route('POST', '/plugin/human/api/input',     human_api.api_input)
 
     # Chord-palette dispatcher (overnight-stabilization 2026-05-10).
     # Body: {host_id, keys: [...], hold_ms?}. Backend for the
