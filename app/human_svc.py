@@ -167,7 +167,7 @@ class HumanService(BaseService):
     # Timestone live-UI helpers                                           #
     # ------------------------------------------------------------------ #
 
-    async def list_range_hosts(self):
+    async def list_range_hosts(self, profile=None):
         """Return the active range's host inventory.
 
         Resolution order:
@@ -180,25 +180,61 @@ class HumanService(BaseService):
              in ``HumanApi._resolve_operator_socket``.
           3. If no meta.json files exist (fresh dev box), fall back to
              a deterministic stub so the Vue layer still renders.
+
+        When ``profile`` is supplied AND resolves to a known Range
+        profile, the scan is narrowed to that profile's
+        ``carrier_runtime_base`` and the VM names are intersected with
+        the profile's deployed_config catalog. Unknown / empty profile
+        names fall through to the legacy union behavior so callers that
+        don't pass a profile (tests, MCP probes, the initial fetch
+        before the dropdown is wired) keep working.
         """
+        # Resolve profile-scoped runtime base + catalog (if any) up
+        # front so all three resolution branches honor the filter.
+        scoped = self._resolve_profile_scope(profile) if profile else None
+
         # 1. Forward-compat: prefer the Range plugin's in-process data
         # store if it ever publishes there.
         try:
             range_hosts = await self.data_svc.locate('range_instances')
             if range_hosts:
-                return {
-                    'profile': '(active range)',
-                    'hosts': [self._normalize_range_host(h) for h in range_hosts],
-                }
+                normalized = [self._normalize_range_host(h) for h in range_hosts]
+                if scoped and scoped.get('catalog') is not None:
+                    catalog = scoped['catalog']
+                    normalized = [
+                        h for h in normalized
+                        if h.get('name') in catalog or h.get('id') in catalog
+                    ]
+                label = scoped['profile'] if scoped else '(active range)'
+                return {'profile': label, 'hosts': normalized}
         except Exception:
             # data_svc.locate raises for unknown collections; that's fine,
             # fall through to the meta.json scan.
             pass
 
-        # 2. Scan meta.json files written by the Range provider.
-        hosts = self._scan_microvm_meta(self._runtime_bases())
+        # 2. Scan meta.json files written by the Range provider. If a
+        # profile was resolved, restrict the scan to its private base.
+        if scoped:
+            bases = [scoped['runtime_base']]
+        else:
+            bases = self._runtime_bases()
+        hosts = self._scan_microvm_meta(bases)
+
+        # Intersect with the profile's deployed_config VM catalog so a
+        # stale meta.json from a previous profile that happened to share
+        # the same carrier_runtime_base (e.g. operator changed the base
+        # mid-flight) is hidden. Only applied when we actually have a
+        # catalog to match against.
+        if scoped and scoped.get('catalog') is not None:
+            catalog = scoped['catalog']
+            hosts = [
+                h for h in hosts
+                if h.get('name') in catalog or h.get('id') in catalog
+            ]
+
         if hosts:
-            return {'profile': '(active range)', 'hosts': hosts}
+            label = scoped['profile'] if scoped else '(active range)'
+            return {'profile': label, 'hosts': hosts}
 
         # 3. No microVMs running — return an empty list so the UI shows
         # a clean empty state instead of fake hosts. Earlier behavior
@@ -206,7 +242,106 @@ class HumanService(BaseService):
         # 10.0.0.12) to populate the dropdown on a fresh dev box, but
         # that masked real "no range deployed yet" status and confused
         # users who tried to click the stubs.
-        return {'profile': '(no range)', 'hosts': []}
+        label = scoped['profile'] if scoped else '(no range)'
+        return {'profile': label, 'hosts': []}
+
+    def _resolve_profile_scope(self, profile_name):
+        """Look up a Range profile and return its scan scope.
+
+        Returns ``None`` when the name is empty / unknown / can't be
+        resolved (so the caller falls back to the union behavior).
+        Otherwise returns a dict::
+
+            {
+              'profile':       <profile name>,
+              'runtime_base':  <carrier_runtime_base path>,
+              'catalog':       set[str] of VM names from
+                               deployed_config.json, or None if
+                               no catalog is available yet (in which
+                               case the runtime_base filter alone
+                               is applied).
+            }
+
+        Looks up ``services['onprem_svc']`` first, then ``range_svc``
+        (the same fallback order ``_configured_runtime_bases`` uses).
+        The deployed_config.json catalog is the source of truth for
+        which VMs belong to a profile — we read it instead of the
+        profile YAML because YAML profiles don't carry an inline
+        image list in this codebase; VMs are added at deploy time and
+        persisted under cdktf.out/stacks/<stack_id>/deployed_config.json.
+        """
+        name = (profile_name or '').strip()
+        if not name:
+            return None
+
+        services = getattr(self, 'services', None)
+        if services is None or not hasattr(services, 'get'):
+            return None
+
+        svc = None
+        for key in ('onprem_svc', 'range_svc'):
+            try:
+                candidate = services.get(key)
+            except Exception:
+                continue
+            if candidate is not None:
+                svc = candidate
+                break
+        if svc is None:
+            return None
+
+        # Find the profile dict + its provider (carrier_runtime_base
+        # is set on the provider instance, not on the YAML dict that
+        # may have omitted it and inherited DEFAULT_CARRIER_RUNTIME_BASE).
+        profiles = getattr(svc, 'profiles', None) or []
+        profile_dict = None
+        for p in profiles:
+            if isinstance(p, dict) and p.get('profile') == name:
+                profile_dict = p
+                break
+        if profile_dict is None:
+            return None
+
+        providers = getattr(svc, 'providers', None) or {}
+        provider = providers.get(name)
+        runtime_base = getattr(provider, 'carrier_runtime_base', None)
+        if not runtime_base:
+            # Fall back to the YAML value (may still be missing —
+            # the default base is shared with every other profile
+            # that didn't override it, so a filter would be useless).
+            runtime_base = profile_dict.get('carrier_runtime_base')
+        if not runtime_base:
+            return None
+
+        # Catalog = VM names from deployed_config.json for this
+        # profile's stack. Best-effort: if the helper isn't available
+        # or the file is missing (profile defined but never deployed)
+        # we return catalog=None so the caller skips the name-match
+        # filter and relies on the runtime_base scan alone.
+        catalog = None
+        try:
+            load = getattr(svc, '_load_deployed_config', None)
+            provider_type = profile_dict.get('provider')
+            if load and provider_type:
+                # sanitize_stack_id lives in plugins.range.app.cdktf.
+                from plugins.range.app.cdktf.cdktf_utilities import (
+                    sanitize_stack_id,
+                )
+                stack_id = sanitize_stack_id(provider_type, name)
+                deployed = load(stack_id) or {}
+                vms = deployed.get('vms') or {}
+                if vms:
+                    catalog = set(vms.keys())
+        except Exception as e:
+            _log.debug(
+                'profile catalog lookup failed for %s: %s', name, e)
+            catalog = None
+
+        return {
+            'profile': name,
+            'runtime_base': runtime_base,
+            'catalog': catalog,
+        }
 
     def _runtime_bases(self):
         services = getattr(self, 'services', None)

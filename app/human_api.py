@@ -231,7 +231,15 @@ class HumanApi:
 
     async def api_hosts(self, request):
         try:
-            payload = await self.human_svc.list_range_hosts()
+            # `?profile=<name>` scopes the inventory to a single Range
+            # profile's carrier_runtime_base (and its catalog of VMs).
+            # Without the query param we keep the legacy union behavior
+            # so callers that don't pass a profile (tests, MCP probes,
+            # the initial fetch before the dropdown is wired) continue
+            # to work unchanged. See list_range_hosts() for the filter
+            # semantics.
+            profile = request.query.get('profile')
+            payload = await self.human_svc.list_range_hosts(profile=profile)
             return web.json_response(payload)
         except Exception:
             traceback.print_exc()

@@ -807,9 +807,20 @@ function clearForm() {
   adhocInput.value = ''
 }
 
-async function fetchHosts() {
+async function fetchHosts(profileName) {
+  // Scope the host inventory to a Range profile when one is selected.
+  // Falls back to the legacy union behavior (no query param) so the
+  // initial mount — before activeProfileId has been restored from
+  // localStorage — still renders something useful.
+  const effective = (profileName !== undefined && profileName !== null)
+    ? profileName
+    : activeProfileId.value
+  let url = '/plugin/human/api/hosts'
+  if (effective) {
+    url += `?profile=${encodeURIComponent(effective)}`
+  }
   try {
-    const res = await $api.get('/plugin/human/api/hosts')
+    const res = await $api.get(url)
     hosts.value = res.data?.hosts || []
     rangeProfileName.value = res.data?.profile || ''
   } catch (err) {
@@ -879,13 +890,15 @@ async function switchProfile(profileId) {
   activeProfileId.value = profileId
   rangeProfileName.value = profileId
   try { localStorage.setItem('human_active_profile', profileId) } catch (_) {}
-  await refreshAll()
+  // Pass the new id explicitly so fetchHosts doesn't race against
+  // Vue's reactivity batching for activeProfileId.
+  await refreshAll(profileId)
 }
 
-async function refreshAll() {
+async function refreshAll(profileName) {
   loading.value = true
   try {
-    await Promise.all([fetchHosts(), fetchWorkflows()])
+    await Promise.all([fetchHosts(profileName), fetchWorkflows()])
   } finally {
     loading.value = false
   }
@@ -1123,10 +1136,12 @@ function handleRunResponse(host_id, data) {
 // ---- Lifecycle -----------------------------------------------------------
 let _profilesPollHandle = null
 onMounted(async () => {
-  // Refresh hosts/workflows first so rangeProfileName is populated;
-  // loadProfiles can then prefer that over the localStorage fallback.
-  await refreshAll()
+  // Load profiles FIRST so the localStorage-restored selection drives
+  // the very first /api/hosts call. Otherwise the initial refresh runs
+  // unscoped and the operator briefly sees the union of every VENV's
+  // VMs before the dropdown kicks in.
   await loadProfiles()
+  await refreshAll(activeProfileId.value || undefined)
   // Live-refresh the profile dropdown every 10 s so profiles created
   // / torn down by other workflows (e.g. cti_pipeline_deploy_range,
   // the operator deleting a profile, the e2e script reaping a stale
