@@ -1,0 +1,19 @@
+---
+
+- id: turla-snake-human-personas
+  name: Turla Snake - Human Personas
+  description: |
+    The 13 (User) actions from CTID Turla-Snake: RDP to victims,
+    log in/out, open Edge, navigate, send email, refresh browser.
+    These run via HID through the Human plugin against the actual
+    GUI victim VMs while the AE adversary chain (turla-snake-ae-only)
+    runs on the implant.
+
+    Maps to Turla-Snake abilities by index in original CTID order:
+    1: RDP to first target (egle-wks)
+    4-5: Log out / log back in to first target
+    6, 10: Open Edge and refresh on first target
+    11: Run PowerShell as File Server Administrator
+    18-19: RDP to second target + navigate google.com
+    32-33: RDP to third target + open Edge + PS as domain admin
+    52: Send emails

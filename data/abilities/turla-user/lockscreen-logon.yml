@@ -1,0 +1,47 @@
+---
+# Lock-screen interactive logon. Wakes the lock screen (Enter), tabs
+# into credentials, types domain\username + password at realistic
+# variable speed, hits Enter. Small reusable atomic — not Turla-
+# specific, just absent from the stock benign-human-activity set.
+
+- id: 7ae00001-7e91-4d6b-9c45-100400060001
+  name: Lock-screen Interactive Logon
+  description: |
+    Wake lock screen, type credentials, sign in. Mimics a real user
+    arriving at a locked desktop. Variable per-char typing speed with
+    jitter so keystroke timing doesn't look machine-driven.
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_lockscreen_logon
+    name: Benign User Activity - Lock-Screen Logon
+  plugin: human
+  tags: [interaction, logon, lockscreen]
+
+  args:
+    username:
+      description: Domain\\User (or just User for local accounts)
+      default: "egle"
+    password:
+      description: User password
+      default: "Producer1!"
+    typing_speed_mean_ms:
+      description: Mean ms-between-keys (realistic typist ~80-130ms)
+      default: 110
+
+  platforms:
+    windows:
+      steps:
+        - { action: dwell, ms: { mean: 1500, jitter: 400 } }
+        - { action: press, key: Enter }
+        - { action: dwell, ms: { mean: 800, jitter: 200 } }
+        - action: type
+          text: "{{ args.username }}"
+          per_char_ms: { mean: "{{ args.typing_speed_mean_ms }}", jitter: 35 }
+        - { action: press, key: Tab }
+        - { action: dwell, ms: { mean: 350, jitter: 100 } }
+        - action: type
+          text: "{{ args.password }}"
+          per_char_ms: { mean: "{{ args.typing_speed_mean_ms }}", jitter: 35 }
+        - { action: dwell, ms: { mean: 250, jitter: 100 } }
+        - { action: press, key: Enter }
+        - { action: wait_for, ms: 15000 }

@@ -1,0 +1,19 @@
+---
+
+- id: turla-interactive-launch
+  name: Turla Interactive Dropper Launch
+  description: |
+    AE-faithful path for the Turla-Snake initial-access step: log in as
+    egle via the lock screen, then open Run and launch the staged EPIC
+    dropper from her Downloads folder. Result: NFVersion_5e.exe runs in
+    an interactive user session — passes the implant's session-check
+    that caused the Ansible-shortcut path to bail out
+    (launch_running=False).
+  atomic_ordering:
+    - 7ae00001-7e91-4d6b-9c45-100400060001  # lockscreen-logon
+    - launch-app-via-runner
+  args:
+    username: egle
+    password: Producer1!
+    app_command: 'C:\Users\egle\Downloads\NFVersion_5e.exe'
+    settle_ms: 4000

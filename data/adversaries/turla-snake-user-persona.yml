@@ -1,0 +1,40 @@
+---
+
+- id: 7ae00001-7e91-4d6b-9c45-100400060000
+  name: Turla Snake — User Persona (Phase 1)
+  description: |
+    HID-driven user persona for the Turla Snake scenario's Phase 1
+    (Steps 1-6 of CTID's turla_snake.yaml). Profile composition only —
+    every step is keystrokes + mouse motion through vioinput.sys.
+  adversary_persona: turla-snake-user
+  duration_estimate_s: 360
+  tags:
+    - benign-human-activity
+    - human-profile
+    - turla-snake
+    - phase-1
+  steps:
+    # Step 1: lock-screen logon (custom new atomic)
+    - { ability: 7ae00001-7e91-4d6b-9c45-100400060001 }
+
+    # Step 2: browse to nato-int.com + click download (6 atomic actions)
+    - { ability: open-default-browser, args: { browser_command: msedge } }
+    - { ability: focus-address-bar-v2 }
+    - { ability: navigate-to-url, args: { url: "http://nato-int.com/" } }
+    - { ability: dwell-reading }
+    - { ability: c4d20756-2d7b-488a-bd7b-68dcb8c89e61 }   # click-link-random (uses UUID id)
+    - { ability: dwell-natural }
+
+    # Step 3: run NFVersion_5e.exe via Win+R
+    - { ability: launch-app-via-runner, args: { app_command: "C:\\Users\\egle\\Downloads\\NFVersion_5e.exe", settle_ms: 6000 } }
+    - { ability: dwell-natural }
+
+    # Step 4: log out
+    - { ability: 7ae00001-7e91-4d6b-9c45-100400060004 }
+
+    # Step 5: log back in
+    - { ability: 7ae00001-7e91-4d6b-9c45-100400060001 }
+
+    # Step 6: open Edge + 3-min dwell (EPIC injection window)
+    - { ability: open-default-browser, args: { browser_command: msedge } }
+    - { ability: 3be24e8d-f7d0-44cb-a388-a1010274dedc, args: { ms: 180000 } }  # dwell

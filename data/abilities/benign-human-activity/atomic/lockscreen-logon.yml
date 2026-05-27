@@ -1,0 +1,102 @@
+---
+# Lock-screen interactive logon. The egle-wks Windows image renders
+# the logon UI as a TEXT-MODE EMS-style credential prompt (Server-Core-
+# style headless logon), NOT the friendly Win10 picture lock screen.
+# Empirically verified by dumping the framebuffer from
+# gpu-daemon.state -- the post-SAS surface looks like:
+#
+#     Enter credentials for <user> or hit ESC to switch users/sign-in methods
+#     Password : _
+#
+# i.e. only a Password field, no username field, the "last interactive
+# user" is pre-selected. Pressing ESC navigates BACKWARD through a
+# TWO-stage stack (NOT three -- the picker stage is fiction on this
+# image):
+#
+#     stage A:  "Enter credentials for <user>"                       -- Password input
+#     stage B:  "Select a sign-in option for <user>" (Password highlighted)
+#     stage X:  one more ESC bails ALL the way out to "Press Ctrl-Alt-Del to unlock"
+#               -- there is NO "Select a user" picker, despite what the
+#               full Win10 logon UI would normally expose. The
+#               SpecialAccounts\UserList registry tweak is dead-letter
+#               on this image (kept in turla-victim-baseline for
+#               documentation parity with the CTID plan).
+#
+# IMPLICATION: to log in as a non-default account, you cannot navigate
+# a picker. You must FIRST set that account as the EMS prompt's default
+# user (HKLM\...\LogonUI\LastLoggedOnUser{,SID,SAMUser,DisplayName})
+# and reboot, so Stage A reads "Enter credentials for <yourAccount>".
+# turla-victim-baseline does exactly that for egle, then schedules a
+# one-shot reboot, so by the time this ability fires the prompt is
+# already bound to the right user.
+#
+# This atomic therefore degenerates to: wake -> dismiss any stale modal
+# -> CAD -> type password on Stage A -> Enter. No Esc, no Down-arrows,
+# no picker_down_count.
+
+- id: 7ae00001-7e91-4d6b-9c45-100400060001
+  name: Lock-screen Interactive Logon
+  description: |
+    Wake -> Ctrl+Alt+Del -> type password for whoever the EMS prompt
+    defaults to -> Enter. Tuned for the text-mode EMS-style logon
+    surface that this Windows qcow2 renders. Assumes the target
+    account has already been set as the EMS default (turla-victim-
+    baseline's LastLoggedOnUser stanza handles this).
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_lockscreen_logon
+    name: Benign User Activity - Lock-Screen Logon
+  plugin: human
+  tags: [interaction, logon, lockscreen]
+
+  args:
+    username:
+      description: |
+        Account name. Used for documentation/log purposes only -- the
+        EMS prompt doesn't accept typed usernames; the actual account
+        being logged in is whichever one Windows has marked as the last
+        interactive user. Make sure turla-victim-baseline (or
+        equivalent) has already set LastLoggedOnUser to this account.
+      default: "egle"
+    password:
+      description: Password for the EMS prompt's default account
+      default: "Producer1!"
+    typing_speed_mean_ms:
+      description: Mean ms-between-keys (realistic typist ~80-130ms)
+      default: 110
+
+  platforms:
+    windows:
+      steps:
+        # 1. Pre-flight Enter: dismisses any leftover "password is
+        #    incorrect" OK modal from a prior failed attempt. Harmless
+        #    on a fresh SAS screen (Enter on "Press Ctrl-Alt-Del to
+        #    unlock" is a no-op).
+        - { action: dwell, ms: { mean: 1000, jitter: 250 } }
+        - { action: press, key: Enter }
+        - { action: dwell, ms: { mean: 1500, jitter: 300 } }
+
+        # 2. Wake the display + give the framebuffer time to paint.
+        #    The GPU daemon needs ~3-5s to render after wake.
+        - { action: dwell, ms: { mean: 4000, jitter: 600 } }
+
+        # 3. Dismiss the Secure-Attention-Sequence prompt. The lock
+        #    surface says "Press Ctrl-Alt-Del to unlock"; a bare Enter
+        #    does nothing -- only the literal C-A-D chord advances.
+        - { action: chord, keys: [LeftCtrl, LeftAlt, Delete], hold_ms: 80 }
+
+        # 4. Let the credential UI render. Lands on Stage A: "Enter
+        #    credentials for <last_user>".
+        - { action: dwell, ms: { mean: 4500, jitter: 800 } }
+
+        # 5. Type password directly. NO Esc -- there's no picker to
+        #    navigate to on this image; the prompt is already bound to
+        #    the correct user via LastLoggedOnUser.
+        - action: type
+          text: "{{ args.password }}"
+          per_char_ms: { mean: "{{ args.typing_speed_mean_ms }}", jitter: 35 }
+        - { action: dwell, ms: { mean: 400, jitter: 100 } }
+
+        # 6. Submit + give the shell time to come up.
+        - { action: press, key: Enter }
+        - { action: wait_for, ms: 18000 }

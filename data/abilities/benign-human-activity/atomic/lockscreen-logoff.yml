@@ -1,0 +1,26 @@
+---
+# Sign out from the desktop via Ctrl+Alt+Del → Sign-out menu pick.
+# Small reusable atomic — not Turla-specific.
+
+- id: 7ae00001-7e91-4d6b-9c45-100400060004
+  name: Lock-screen Sign Out (Ctrl+Alt+Del)
+  description: |
+    Open the Windows security-attention sequence, arrow down to the
+    Sign-out item, Enter. Useful for any persona that needs to log
+    off cleanly (e.g. lock-screen demos, account-switch flows).
+  tactic: benign-human-activity
+  technique:
+    attack_id: x_human_lockscreen_logoff
+    name: Benign User Activity - Lock-Screen Sign Out
+  plugin: human
+  tags: [interaction, logoff, lockscreen]
+
+  platforms:
+    windows:
+      steps:
+        - { action: chord, keys: [LeftCtrl, LeftAlt, Delete], hold_ms: 80 }
+        - { action: dwell, ms: { mean: 4000, jitter: 800 } }
+        - { action: press, key: Down }
+        - { action: dwell, ms: { mean: 500, jitter: 150 } }
+        - { action: press, key: Enter }
+        - { action: wait_for, ms: 12000 }
