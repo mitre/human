@@ -1,4 +1,4 @@
-# MITRE Caldera Plugin: Human
+# Caldera Plugin: Human
 
 Plugin supplying Caldera with human emulation capabilities.
 
