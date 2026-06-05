@@ -91,13 +91,13 @@ def _parse_int_or_none(value) -> int | None:
             return None
     return None
 
-# Canonical microVM runtime base. Mirrors the Range provider constant
-# (plugins/range/app/cdktf/providers/onprem_microvm_provider.py:83
-#  DEFAULT_CARRIER_RUNTIME_BASE = "/tmp/timestone-microvms").
-# The Range provider's A3 agent writes meta.json under
+# Canonical microVM runtime base. Mirrors the Range provider's
+# RANGE_MICROVM_RUNTIME_BASE env var (set by the Range provider at
+# deploy time; falls back to a resolved per-user cache dir). The Range
+# provider's A3 agent writes meta.json under
 # <BASE>/<host_id>-<suffix>/meta.json once the input/gpu daemons are up.
 MICROVM_RUNTIME_BASE = os.environ.get(
-    'TIMESTONE_MICROVM_RUNTIME_BASE', '/tmp/timestone-microvms'
+    'RANGE_MICROVM_RUNTIME_BASE', '/tmp/range-microvms'
 )
 
 # Canonical atomic-abilities directory for HID profiles. Hard-coded for
