@@ -1,4 +1,4 @@
-# MITRE Caldera Plugin: Human
+# Caldera Plugin: Human
 
 Plugin supplying Caldera with human-emulation capabilities. Runs in two
 modes — **standalone** (legacy, in-guest agent) or **paired with the
