@@ -4,6 +4,14 @@ Plugin supplying Caldera with human-emulation capabilities. Runs in two
 modes — **standalone** (legacy, in-guest agent) or **paired with the
 Range plugin** (HID stack, host-side drive over virtio-input).
 
+## Design conventions
+
+Features must be **environment-agnostic** — never hardcode deployment-specific
+values. See **[docs/agent-skills/environment-agnostic.md](docs/agent-skills/environment-agnostic.md)**:
+derive/discover from the environment, show defaults as placeholders (not asserted
+values), keep copy generic, and fill only absent config. Includes a
+before-you-merge checklist. Applies to all changes.
+
 ## Recent changes
 
 - Stub `microvm-1` / `microvm-2` hosts removed. The API now returns
