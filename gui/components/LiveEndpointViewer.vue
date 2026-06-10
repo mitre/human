@@ -420,10 +420,13 @@ async function connectFrame() {
 async function connectGui() {
   let RFB
   try {
-    const mod = await import(
-      /* @vite-ignore */
-      '/plugin/range/static/novnc/core/rfb.js'
-    )
+    // noVNC core is served at runtime by the range plugin. Build the URL as a
+    // variable so the bundler treats this as a true runtime import: a literal
+    // dynamic import of an absolute /plugin/... path is a HARD build error in
+    // vite 7 / rollup ("failed to resolve import"), which @vite-ignore alone
+    // does not suppress. A non-literal specifier is left un-analyzed.
+    const rfbUrl = '/plugin/range/static/novnc/core/rfb.js'
+    const mod = await import(/* @vite-ignore */ rfbUrl)
     RFB = mod.default
   } catch (err) {
     console.error('[live-endpoint] failed to load noVNC core', err)

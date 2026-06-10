@@ -137,6 +137,11 @@ plugins:
 
 Then restart the Caldera server so it picks up the plugin.
 
+> **Important — the `--insecure` flag ignores `local.yml`.** Caldera's `--insecure`
+> forces it to read `conf/default.yml`, **not** `conf/local.yml`. Start the server
+> **without** `--insecure` (e.g. `python3 server.py -E local --build`) for this
+> `plugins:` list to take effect, or add `- human` to `conf/default.yml` as well.
+
 ### Step 2 — Install the server-side Python packages
 
 The Caldera server runs additional Python packages for the Human
