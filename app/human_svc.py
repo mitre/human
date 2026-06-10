@@ -9,6 +9,7 @@ import time
 import zipfile
 
 from importlib import import_module
+from urllib.parse import quote
 
 from app.utility.base_service import BaseService
 from plugins.human.app.c_human import Human
@@ -19,6 +20,81 @@ from plugins.human.app.c_workflow import Workflow
 # read from. Tests patch human_api.MICROVM_RUNTIME_BASE; we re-read
 # it dynamically below to honor that.
 from plugins.human.app import human_api as _human_api
+
+
+# --------------------------------------------------------------------------- #
+# Viewer-transport registry  (dynamic + modular)
+# --------------------------------------------------------------------------- #
+# How the Human LiveEndpointViewer should VIEW a host, resolved from
+# (provider, session_type). Adding a hypervisor = adding rows here; NO
+# branching logic anywhere else. 'gui' = a desktop/framebuffer surface,
+# 'cli' = a text console. An unknown combination resolves to transport
+# 'none' (an honest empty state) instead of a dead sentinel the viewer
+# cannot render.
+_VIEWER_TRANSPORT = {
+    ('microvm', 'gui'): 'frame',
+    ('microvm', 'cli'): 'console',
+    ('proxmox', 'gui'): 'vnc',
+    ('proxmox', 'cli'): 'console',
+    ('vbox',    'gui'): 'vnc',
+    ('vbox',    'cli'): 'console',
+    ('vsphere', 'gui'): 'vnc',
+    ('vsphere', 'cli'): 'console',
+}
+# Default session_type when a provider's inventory record carries none.
+# Proxmox/vbox/vsphere guests are reached over their serial console
+# (hypervisor-side, AE-clean) so they default to 'cli'; microVMs default
+# to their framebuffer desktop.
+_VIEWER_DEFAULT_SESSION_TYPE = {
+    'microvm': 'gui', 'proxmox': 'cli', 'vbox': 'cli', 'vsphere': 'cli',
+}
+# transport -> (url_template{vm}, needs_profile, needs_credentials, interactive).
+# The range vnc/console proxies REQUIRE ?profile= to resolve a non-microVM VM,
+# so profile-qualified URLs are built here once (server-side), not string-built
+# in the frontend.
+_VIEWER_TRANSPORT_SPEC = {
+    'frame':   ('/plugin/range/api/frame/{vm}/ws',  False, False, True),
+    'vnc':     ('/plugin/range/api/vnc/{vm}/ws',     True,  True,  True),
+    'console': ('/plugin/range/onprem/console/{vm}', True,  False, True),
+}
+
+
+def resolve_viewer_endpoint(provider, session_type, vm_name, profile=None):
+    """Resolve a host's live-endpoint descriptor from the transport registry.
+
+    Returns a dict the LiveEndpointViewer renders generically::
+
+        {transport, endpoint_url, credentials_url, interactive, session_type}
+
+    ``transport`` is one of ``frame|vnc|console|none``. URLs are
+    profile-qualified when the transport needs it (proxmox/vbox console + vnc
+    resolve per-profile). An unknown ``(provider, session_type)`` yields
+    transport ``'none'`` — an honest "no live endpoint" state, never a dead
+    sentinel. Adding a hypervisor is a registry edit above; this function is
+    unchanged.
+    """
+    prov = (provider or '').lower()
+    st = (session_type or '').lower()
+    if st not in ('gui', 'cli'):
+        st = _VIEWER_DEFAULT_SESSION_TYPE.get(prov, '')
+    transport = _VIEWER_TRANSPORT.get((prov, st)) if vm_name else None
+    if not transport:
+        return {'transport': 'none', 'endpoint_url': '',
+                'credentials_url': '', 'interactive': False,
+                'session_type': st or ''}
+    url_tmpl, needs_profile, needs_creds, interactive = \
+        _VIEWER_TRANSPORT_SPEC[transport]
+    vm_q = quote(str(vm_name), safe='')
+    qs = (f'?profile={quote(str(profile), safe="")}'
+          if (needs_profile and profile) else '')
+    return {
+        'transport':       transport,
+        'endpoint_url':    url_tmpl.format(vm=vm_q) + qs,
+        'credentials_url': (f'/plugin/range/api/vnc/{vm_q}/credentials{qs}'
+                            if needs_creds else ''),
+        'interactive':     interactive,
+        'session_type':    st,
+    }
 
 _log = logging.getLogger(__name__)
 
@@ -152,7 +228,7 @@ class HumanService(BaseService):
                 workflows=[],
             ).display
         except Exception as e:
-            self.log.error('Error building legacy human. %s' % e)
+            self.log.error('Error building legacy human. %s', e)
             raise
 
     async def load_humans(self, data=None):
@@ -171,109 +247,91 @@ class HumanService(BaseService):
         """Return the active range's host inventory.
 
         Resolution order:
-          1. If the Range plugin ever publishes hosts through
+          1. When ``profile`` is supplied AND the Range plugin's onprem
+             service is reachable in-process, return that profile's
+             *deployed* inventory via ``onprem_svc.ansible_inventory(
+             profile, provider)``. This is the authoritative,
+             provider-agnostic per-profile host list — it reads the
+             profile's ``deployed_config.json`` (the single source of
+             truth for which VMs were deployed under this profile) and
+             overlays live status/IP from the provider. It works
+             uniformly for proxmox / vbox / microvm, and an
+             empty / never-deployed profile correctly returns ``[]``.
+          2. If the Range plugin ever publishes hosts through
              ``data_svc.locate('range_instances')`` we prefer that
              (forward-compat — Range doesn't currently publish here).
-          2. Otherwise, scan ``<MICROVM_RUNTIME_BASE>/*/meta.json`` —
-             this is what the Range provider's A3 microvm-launch agent
-             writes once a microVM is up. Mirrors the lookup pattern
-             in ``HumanApi._resolve_operator_socket``.
-          3. If no meta.json files exist (fresh dev box), fall back to
-             a deterministic stub so the Vue layer still renders.
+          3. Otherwise (no profile selected, or Range not loaded — e.g.
+             tests, MCP probes, the initial fetch before the dropdown is
+             wired), scan ``<MICROVM_RUNTIME_BASE>/*/meta.json`` — what
+             the Range provider's microvm-launch agent writes once a
+             microVM is up. Mirrors ``HumanApi._resolve_operator_socket``.
 
-        When ``profile`` is supplied AND resolves to a known Range
-        profile, the scan is narrowed to that profile's
-        ``carrier_runtime_base`` and the VM names are intersected with
-        the profile's deployed_config catalog. Unknown / empty profile
-        names fall through to the legacy union behavior so callers that
-        don't pass a profile (tests, MCP probes, the initial fetch
-        before the dropdown is wired) keep working.
+        ROOT-CAUSE NOTE: the host list MUST be scoped to the SELECTED
+        profile's actually-deployed VMs. The previous implementation
+        narrowed the meta.json scan by each profile's
+        ``carrier_runtime_base``, but that attribute exists ONLY on the
+        microvm provider — proxmox / vbox providers have no
+        ``carrier_runtime_base``, so the scope-resolver returned ``None``
+        for them and every non-microvm profile (and any empty profile)
+        fell through to the *global union* of all microVM meta.json. The
+        result: ``demo-proxmox`` and an empty ``vbox-validate`` both
+        rendered the identical pile of stray microVMs. Sourcing from
+        ``deployed_config.json`` (per-profile, all providers) fixes it.
         """
-        # Resolve profile-scoped runtime base + catalog (if any) up
-        # front so all three resolution branches honor the filter.
-        scoped = self._resolve_profile_scope(profile) if profile else None
+        # 1. Profile selected -> authoritative per-profile deployed
+        # inventory from the Range plugin (proxmox / vbox / microvm).
+        if profile and str(profile).strip():
+            scoped = await self._range_profile_inventory(str(profile).strip())
+            if scoped is not None:
+                return scoped
+            # Range unreachable / profile unknown: do NOT silently fall
+            # back to the global meta.json union (that's the very bug
+            # this method fixes — it would show another profile's VMs).
+            # A named-but-unresolvable profile gets a clean empty state.
+            return {'profile': str(profile).strip(), 'hosts': []}
 
-        # 1. Forward-compat: prefer the Range plugin's in-process data
-        # store if it ever publishes there.
+        # 2. Forward-compat: prefer the Range plugin's in-process data
+        # store if it ever publishes there. (No-profile path only.)
         try:
             range_hosts = await self.data_svc.locate('range_instances')
             if range_hosts:
                 normalized = [self._normalize_range_host(h) for h in range_hosts]
-                if scoped and scoped.get('catalog') is not None:
-                    catalog = scoped['catalog']
-                    normalized = [
-                        h for h in normalized
-                        if h.get('name') in catalog or h.get('id') in catalog
-                    ]
-                label = scoped['profile'] if scoped else '(active range)'
-                return {'profile': label, 'hosts': normalized}
-        except Exception:
+                return {'profile': '(active range)', 'hosts': normalized}
+        except Exception as e:
             # data_svc.locate raises for unknown collections; that's fine,
             # fall through to the meta.json scan.
-            pass
+            self.log.debug(repr(e))
 
-        # 2. Scan meta.json files written by the Range provider. If a
-        # profile was resolved, restrict the scan to its private base.
-        if scoped:
-            bases = [scoped['runtime_base']]
-        else:
-            bases = self._runtime_bases()
-        hosts = self._scan_microvm_meta(bases)
-
-        # Intersect with the profile's deployed_config VM catalog so a
-        # stale meta.json from a previous profile that happened to share
-        # the same carrier_runtime_base (e.g. operator changed the base
-        # mid-flight) is hidden. Only applied when we actually have a
-        # catalog to match against.
-        if scoped and scoped.get('catalog') is not None:
-            catalog = scoped['catalog']
-            hosts = [
-                h for h in hosts
-                if h.get('name') in catalog or h.get('id') in catalog
-            ]
-
+        # 3. No profile selected -> legacy union meta.json scan. Used by
+        # tests, MCP probes, and the very first fetch before the Vue
+        # dropdown has restored a profile from localStorage.
+        hosts = self._scan_microvm_meta(self._runtime_bases())
         if hosts:
-            label = scoped['profile'] if scoped else '(active range)'
-            return {'profile': label, 'hosts': hosts}
+            return {'profile': '(active range)', 'hosts': hosts}
 
-        # 3. No microVMs running — return an empty list so the UI shows
-        # a clean empty state instead of fake hosts. Earlier behavior
-        # returned two stub entries (microvm-1 10.0.0.11, microvm-2
-        # 10.0.0.12) to populate the dropdown on a fresh dev box, but
-        # that masked real "no range deployed yet" status and confused
-        # users who tried to click the stubs.
-        label = scoped['profile'] if scoped else '(no range)'
-        return {'profile': label, 'hosts': []}
+        # No microVMs running — return an empty list so the UI shows a
+        # clean empty state instead of fake hosts.
+        return {'profile': '(no range)', 'hosts': []}
 
-    def _resolve_profile_scope(self, profile_name):
-        """Look up a Range profile and return its scan scope.
+    async def _range_profile_inventory(self, name):
+        """Return ``{'profile': name, 'hosts': [...]}`` for a single
+        Range profile's *deployed* VMs, or ``None`` when the Range
+        onprem service / profile can't be resolved in-process.
 
-        Returns ``None`` when the name is empty / unknown / can't be
-        resolved (so the caller falls back to the union behavior).
-        Otherwise returns a dict::
+        Sources hosts from ``onprem_svc.ansible_inventory(profile,
+        provider)`` — the same provider-agnostic, deployed_config-backed
+        inventory the Range plugin's own UI renders. Because it is keyed
+        off ``deployed_config.json`` (written per stack at deploy time),
+        a profile that was never deployed (or whose VMs were terminated)
+        returns an empty list, and a proxmox/vbox profile returns its
+        proxmox/vbox VMs — not a union of unrelated microVMs.
 
-            {
-              'profile':       <profile name>,
-              'runtime_base':  <carrier_runtime_base path>,
-              'catalog':       set[str] of VM names from
-                               deployed_config.json, or None if
-                               no catalog is available yet (in which
-                               case the runtime_base filter alone
-                               is applied).
-            }
-
-        Looks up ``services['onprem_svc']`` first, then ``range_svc``
-        (the same fallback order ``_configured_runtime_bases`` uses).
-        The deployed_config.json catalog is the source of truth for
-        which VMs belong to a profile — we read it instead of the
-        profile YAML because YAML profiles don't carry an inline
-        image list in this codebase; VMs are added at deploy time and
-        persisted under cdktf.out/stacks/<stack_id>/deployed_config.json.
+        Returns ``None`` (not an empty result) when the service is
+        absent or doesn't expose ``ansible_inventory`` / ``profiles`` so
+        the caller can decide how to degrade. Looks up ``onprem_svc``
+        first, then ``range_svc`` (same order ``_configured_runtime_bases``
+        uses).
         """
-        name = (profile_name or '').strip()
-        if not name:
-            return None
-
         services = getattr(self, 'services', None)
         if services is None or not hasattr(services, 'get'):
             return None
@@ -290,57 +348,88 @@ class HumanService(BaseService):
         if svc is None:
             return None
 
-        # Find the profile dict + its provider (carrier_runtime_base
-        # is set on the provider instance, not on the YAML dict that
-        # may have omitted it and inherited DEFAULT_CARRIER_RUNTIME_BASE).
-        profiles = getattr(svc, 'profiles', None) or []
+        # Need both the per-profile inventory coroutine and the profile
+        # list (to map profile name -> provider type for the stack id).
+        inventory_fn = getattr(svc, 'ansible_inventory', None)
+        profiles = getattr(svc, 'profiles', None)
+        if not callable(inventory_fn) or not isinstance(profiles, (list, tuple)):
+            return None
+
         profile_dict = None
         for p in profiles:
             if isinstance(p, dict) and p.get('profile') == name:
                 profile_dict = p
                 break
         if profile_dict is None:
+            # Unknown profile name for this Range service.
             return None
 
-        providers = getattr(svc, 'providers', None) or {}
-        provider = providers.get(name)
-        runtime_base = getattr(provider, 'carrier_runtime_base', None)
-        if not runtime_base:
-            # Fall back to the YAML value (may still be missing —
-            # the default base is shared with every other profile
-            # that didn't override it, so a filter would be useless).
-            runtime_base = profile_dict.get('carrier_runtime_base')
-        if not runtime_base:
+        provider = profile_dict.get('provider')
+        if not provider:
             return None
 
-        # Catalog = VM names from deployed_config.json for this
-        # profile's stack. Best-effort: if the helper isn't available
-        # or the file is missing (profile defined but never deployed)
-        # we return catalog=None so the caller skips the name-match
-        # filter and relies on the runtime_base scan alone.
-        catalog = None
         try:
-            load = getattr(svc, '_load_deployed_config', None)
-            provider_type = profile_dict.get('provider')
-            if load and provider_type:
-                # sanitize_stack_id lives in plugins.range.app.cdktf.
-                from plugins.range.app.cdktf.cdktf_utilities import (
-                    sanitize_stack_id,
-                )
-                stack_id = sanitize_stack_id(provider_type, name)
-                deployed = load(stack_id) or {}
-                vms = deployed.get('vms') or {}
-                if vms:
-                    catalog = set(vms.keys())
+            records = await inventory_fn(name, provider)
         except Exception as e:
-            _log.debug(
-                'profile catalog lookup failed for %s: %s', name, e)
-            catalog = None
+            # Log-level-aware: full trace under DEBUG, concise otherwise.
+            if _log.isEnabledFor(logging.DEBUG):
+                _log.exception(
+                    'ansible_inventory failed for profile %s', name)
+            else:
+                _log.warning(
+                    'ansible_inventory failed for profile %s: %s', name, e)
+            # Resolved the profile but the inventory call errored: return
+            # an empty (scoped) list rather than leaking the global union.
+            return {'profile': name, 'hosts': []}
+
+        hosts = [
+            self._normalize_inventory_host(r, name)
+            for r in (records or [])
+            if isinstance(r, dict)
+        ]
+        return {'profile': name, 'hosts': hosts}
+
+    @staticmethod
+    def _normalize_inventory_host(rec, profile=None):
+        """Coerce a Range ``ansible_inventory`` record into the shape the
+        Human host dropdown + LiveEndpointViewer expect.
+
+        The viewer TRANSPORT is resolved from a single provider->transport
+        registry (:func:`resolve_viewer_endpoint`) and surfaced as an explicit,
+        profile-qualified endpoint descriptor (``transport`` / ``endpoint_url``
+        / ``credentials_url`` / ``interactive``) — so the frontend renders ANY
+        provider generically instead of string-matching on provider +
+        session_type. Adding a hypervisor is a registry row, not a branch here.
+        ``frame_ws`` / ``console_ws`` are kept as back-compat aliases for any
+        legacy reader; the descriptor is authoritative.
+        """
+        vm_name = rec.get('name') or rec.get('id')
+        provider = rec.get('provider') or 'unknown'
+        session_type = (rec.get('session_type') or '').lower()
+
+        ep = resolve_viewer_endpoint(provider, session_type, vm_name, profile)
 
         return {
-            'profile': name,
-            'runtime_base': runtime_base,
-            'catalog': catalog,
+            'id':           rec.get('id') or vm_name,
+            'name':         vm_name,
+            'ip':           rec.get('ip') or '',
+            'os':           rec.get('os', 'unknown'),
+            'status':       rec.get('status') or 'unknown',
+            'provider':     provider,
+            'session_type': ep['session_type'] or 'none',
+            # Back-compat aliases for legacy readers; the descriptor below is
+            # authoritative.
+            'frame_ws':     (ep['endpoint_url']
+                             if ep['transport'] == 'frame' else None),
+            'console_ws':   (ep['endpoint_url']
+                             if ep['transport'] == 'console' else None),
+            'special_socket': None,
+            # Modular viewer descriptor — provider-agnostic, profile baked in.
+            'transport':       ep['transport'],
+            'endpoint_url':    ep['endpoint_url'],
+            'credentials_url': ep['credentials_url'],
+            'interactive':     ep['interactive'],
+            'profile':         profile or '',
         }
 
     def _runtime_bases(self):
@@ -475,6 +564,7 @@ class HumanService(BaseService):
             console_ws = (
                 f'/plugin/range/onprem/console/{vm_name}'
                 if session_type == 'cli' else None)
+            ep = resolve_viewer_endpoint('microvm', session_type, vm_name, None)
             out.append({
                 'id':           vm_name,
                 'name':         vm_name,
@@ -495,6 +585,13 @@ class HumanService(BaseService):
                 # and xterm.js (cli) without an extra round-trip. 'shell'
                 # is the legacy stub label.
                 'session_type': session_type,
+                # Modular viewer descriptor (same registry as the profile path)
+                # so both inventory sources surface an identical contract.
+                'transport':       ep['transport'],
+                'endpoint_url':    ep['endpoint_url'],
+                'credentials_url': ep['credentials_url'],
+                'interactive':     ep['interactive'],
+                'profile':         '',
             })
 
         if fingerprint is not None:
@@ -550,8 +647,10 @@ class HumanService(BaseService):
                                    or getattr(w, 'description', '') or '',
                     'is_hid': False,
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            # Legacy 'workflows' collection is absent unless the opt-in
+            # pyhuman runtime loaded it; degrade to HID-only and continue.
+            self.log.debug(repr(e))
         return {'workflows': live}
 
     def _discover_profiles(self):
@@ -706,7 +805,7 @@ class HumanService(BaseService):
             workflow_description = getattr(module, 'WORKFLOW_DESCRIPTION')
             await self.data_svc.store(Workflow(name=workflow_name, description=workflow_description, file=workflow_file))
         except Exception as e:
-            self.log.error('Error loading extension=%s, %s' % (module_path, e))
+            self.log.error('Error loading extension=%s, %s', module_path, e)
 
     def _legacy_workflow_catalog(self):
         root = os.path.join(self.pyhuman_path, 'app', 'workflows')
@@ -789,7 +888,7 @@ class HumanService(BaseService):
             task_cluster_interval, tasks_per_cluster, extra):
         payload_path = os.path.abspath(os.path.join(self.human_dir, 'payloads'))
         behaviors, workflows = await self._append_module_paths(modules, [])
-        self.log.debug('Compressing new legacy human: %s' % name)
+        self.log.debug('Compressing new legacy human: %s', name)
 
         if platform == 'windows-psh':
             await self._create_windows_archive(payload_path, behaviors, name)

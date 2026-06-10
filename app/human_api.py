@@ -1,16 +1,64 @@
 import asyncio
 import glob
 import json
+import logging
 import os
 import re
 import socket
-import traceback
 from datetime import datetime
 from pathlib import Path
 
 from aiohttp import web
 
+from app.api.v2.responses import JsonHttpBadRequest
 from app.service.auth_svc import for_all_public_methods, check_authorization
+from app.utility.base_world import BaseWorld
+
+# Module logger for the handler/helper layer (HumanApi is a plain class,
+# not a BaseService, so it can't use self.add_service()'s named logger).
+# Handlers attach this as self.log in __init__ and log exceptions through
+# it instead of dumping tracebacks to stderr.
+log = logging.getLogger(__name__)
+
+
+def _human_conf(prop: str):
+    """Read ``prop`` from the human plugin config, returning ``None`` if
+    unset/unavailable.
+
+    Tries the applied ``human`` config scope first (populated by
+    ``hook.enable`` -> ``BaseWorld.apply_config('human', ...)``); this is the
+    path request-time callers like the focus-click geometry take. Falls back
+    to reading ``conf/local.yml`` then ``conf/default.yml`` straight off disk
+    so the module-level tunables below — resolved at *import*, before
+    ``enable`` has applied the config — can still honor a ``local.yml``
+    override. Mirrors the timestone plugin's ``_plugin_conf_value`` idiom.
+
+    :param prop: config key under the ``human`` scope.
+    :return: the configured value, or ``None`` when neither the applied
+        config nor the on-disk conf carry the key. Used as the *middle*
+        layer of an ENV -> conf -> in-code-default chain, so an unconfigured
+        plugin keeps its historical defaults and an exported env var wins.
+    :raises: never — any lookup/parse error degrades to ``None``.
+    """
+    try:
+        value = BaseWorld.get_config(name='human', prop=prop)
+        if value is not None:
+            return value
+    except Exception:  # noqa: BLE001 — config not yet applied / key absent
+        pass
+    conf_dir = HUMAN_PLUGIN_ROOT / 'conf'
+    for fname in ('local.yml', 'default.yml'):
+        try:
+            import yaml
+            with open(conf_dir / fname, encoding='utf-8') as f:
+                data = yaml.safe_load(f) or {}
+            if isinstance(data, dict) and data.get(prop) is not None:
+                return data[prop]
+        except FileNotFoundError:
+            continue
+        except Exception:  # noqa: BLE001 — malformed conf must not break import
+            continue
+    return None
 
 # Cloud carrier support: when meta.json declares `transport.kind ==
 # "ssh-tunnel"` we open an `ssh -L` to forward the remote operator UDS
@@ -32,8 +80,13 @@ except Exception:  # noqa: BLE001 — module-load defensive
 # operators clean it up manually.
 HUMAN_PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_RECORDINGS_BASE = str(HUMAN_PLUGIN_ROOT / 'data' / 'recordings')
-RECORDINGS_BASE = os.environ.get(
-    'TIMESTONE_RECORDINGS_BASE', _DEFAULT_RECORDINGS_BASE
+# Resolution: TIMESTONE_RECORDINGS_BASE env -> human conf (recordings_base)
+# -> the plugin-owned data/recordings/ default. Env still wins so existing
+# deploys are unchanged; conf is the additive middle layer.
+RECORDINGS_BASE = (
+    os.environ.get('TIMESTONE_RECORDINGS_BASE')
+    or _human_conf('recordings_base')
+    or _DEFAULT_RECORDINGS_BASE
 )
 
 # Filenames the MP4-serving endpoint will accept. Defensive: enforce
@@ -96,8 +149,14 @@ def _parse_int_or_none(value) -> int | None:
 # deploy time; falls back to a resolved per-user cache dir). The Range
 # provider's A3 agent writes meta.json under
 # <BASE>/<host_id>-<suffix>/meta.json once the input/gpu daemons are up.
-MICROVM_RUNTIME_BASE = os.environ.get(
-    'RANGE_MICROVM_RUNTIME_BASE', '/tmp/range-microvms'
+# Resolution: RANGE_MICROVM_RUNTIME_BASE env -> human conf
+# (microvm_runtime_base) -> the historical /tmp/range-microvms default. The
+# Range provider sets the env var at deploy time, so env wins; conf is the
+# additive middle layer for operators who configure it instead.
+MICROVM_RUNTIME_BASE = (
+    os.environ.get('RANGE_MICROVM_RUNTIME_BASE')
+    or _human_conf('microvm_runtime_base')
+    or '/tmp/range-microvms'
 )
 
 # Canonical atomic-abilities directory for HID profiles. Hard-coded for
@@ -218,8 +277,11 @@ class HumanApi:
         self.auth_svc = services.get('auth_svc')
         self.data_svc = services.get('data_svc')
         self.human_svc = human_svc
+        # HumanApi is a plain handler class (not a BaseService), so it logs
+        # through the module logger rather than an add_service() named one.
+        self.log = log
 
-    async def splash(self, request):
+    async def splash(self, request: web.Request):
         """Sidebar entrypoint. Serves the Magma SPA's index.html;
         client-side routing renders the Vue Human UI. Mirrors the
         same pattern range/onprem uses (range/hook.py:splash). The
@@ -229,7 +291,27 @@ class HumanApi:
 
     # --- Timestone live UI routes -------------------------------------------
 
-    async def api_hosts(self, request):
+    async def api_hosts(self, request: web.Request):
+        """Return the live microVM host inventory the Human UI can drive.
+
+        Args:
+            request: aiohttp GET request. Optional ``?profile=<name>`` query
+                param scopes the inventory to a single Range profile's
+                ``carrier_runtime_base`` (and its VM catalog). Omitting it keeps
+                the legacy union behavior across all runtime bases (so tests /
+                MCP probes / the pre-dropdown initial fetch still work).
+                Authentication enforced by the class-level
+                ``@for_all_public_methods(check_authorization)``.
+
+        Returns:
+            ``web.json_response`` with the payload from
+            ``human_svc.list_range_hosts`` — ``{"hosts": [...], "profile": ...}``
+            — at HTTP 200. On any exception, logs it and returns
+            ``{"hosts": [], "profile": ""}`` at HTTP 500.
+
+        Read-only: delegates to the Human service's host enumeration; mutates no
+        state.
+        """
         try:
             # `?profile=<name>` scopes the inventory to a single Range
             # profile's carrier_runtime_base (and its catalog of VMs).
@@ -242,63 +324,89 @@ class HumanApi:
             payload = await self.human_svc.list_range_hosts(profile=profile)
             return web.json_response(payload)
         except Exception:
-            traceback.print_exc()
+            self.log.exception('api_hosts failed to enumerate range hosts')
             return web.json_response({'hosts': [], 'profile': ''}, status=500)
 
-    async def api_workflows(self, request):
+    async def api_workflows(self, request: web.Request):
+        """Return the live (Timestone) workflows for the Human UI.
+
+        Args:
+            request: aiohttp GET request (no params read). Authentication
+                enforced by the class-level
+                ``@for_all_public_methods(check_authorization)``.
+
+        Returns:
+            ``web.json_response`` with the payload from
+            ``human_svc.list_live_workflows`` — ``{"workflows": [...]}`` — at
+            HTTP 200. On any exception, logs it and returns
+            ``{"workflows": []}`` at HTTP 500.
+
+        Read-only: delegates to the Human service; mutates no state.
+        """
         try:
             payload = await self.human_svc.list_live_workflows()
             return web.json_response(payload)
         except Exception:
-            traceback.print_exc()
+            self.log.exception('api_workflows failed to list live workflows')
             return web.json_response({'workflows': []}, status=500)
 
-    async def api_legacy_workflows(self, request):
+    async def api_legacy_workflows(self, request: web.Request):
         try:
             payload = await self.human_svc.list_legacy_workflows()
             return web.json_response(payload)
         except Exception:
-            traceback.print_exc()
+            self.log.exception(
+                'api_legacy_workflows failed to list legacy workflows')
             return web.json_response({'workflows': []}, status=500)
 
-    async def api_legacy_humans(self, request):
+    async def api_legacy_humans(self, request: web.Request):
         try:
             payload = await self.human_svc.load_humans({})
             return web.json_response({'humans': payload})
         except Exception:
-            traceback.print_exc()
+            self.log.exception('api_legacy_humans failed to load humans')
             return web.json_response({'humans': []}, status=500)
 
-    async def api_legacy_build(self, request):
+    async def api_legacy_build(self, request: web.Request):
+        """Build a legacy pyhuman archive from the cradle-builder form.
+
+        :param request: aiohttp POST with the human-builder JSON body.
+        :return: ``web.json_response`` ``{"status": "success", "human": ...}``
+            at HTTP 200. Client/validation errors raise ``JsonHttpBadRequest``
+            (the LegacyHumanBuilder.vue reads ``response.data.error``, which
+            the JsonHttp error body provides); internal failures degrade to a
+            generic HTTP 500 (no exception text leaked).
+        :raises JsonHttpBadRequest: invalid JSON body or a build ValueError.
+        """
         try:
             body = dict(await request.json())
         except Exception:
-            return web.json_response(
-                {'status': 'error', 'error': 'invalid JSON body'},
-                status=400)
+            raise JsonHttpBadRequest('invalid JSON body')
         try:
             human = await self.human_svc.build_human(body)
             return web.json_response({'status': 'success', 'human': human})
         except ValueError as e:
+            raise JsonHttpBadRequest(str(e))
+        except Exception:
+            self.log.exception('api_legacy_build failed to build human')
             return web.json_response(
-                {'status': 'error', 'error': str(e)}, status=400)
-        except Exception as e:
-            traceback.print_exc()
-            return web.json_response(
-                {'status': 'error', 'error': str(e)}, status=500)
+                {'status': 'error', 'error': 'failed to build human'},
+                status=500)
 
-    async def api_run(self, request):
+    async def api_run(self, request: web.Request):
         """Ad-hoc dispatch: focus-grab click + type text + Enter via the
         host's tablet *and* keyboard daemons.
 
         Wire sequence (overnight-stabilization 2026-05-10):
 
-          [tablet]   move      → (512, 384), duration_ms=0
+          [tablet]   move      → framebuffer center, duration_ms=0
           [tablet]   click     → BTN_LEFT  (focuses whatever's
                                  under the cursor; coordinate is
-                                 the dead center of the 1024x768
-                                 framebuffer the gpu daemon
-                                 advertises)
+                                 the dead center of the framebuffer
+                                 — resolved per host from gpu_daemon
+                                 geometry / config / the 1024x768
+                                 default, i.e. (512, 384) unless
+                                 reconfigured; see _focus_click_center)
           [keyboard] dwell     → 200ms (let the click settle)
           [keyboard] type      → cmd, per_char_ms=50, jitter_pct=0,
                                  pause_pct=0 (slowed from 30 to
@@ -361,14 +469,14 @@ class HumanApi:
         except (FileNotFoundError, KeyError):
             kbd_sock_path = None
 
-        # 1024x768 is hard-coded here; both Server 2022 and Win10
-        # templates spawn at that geometry. If Range starts spawning
-        # at other resolutions the click coordinate will be off-center
-        # but still within bounds (until 800x600 at least). TODO:
-        # read it from gpu_daemon block of meta.json.
+        # Click the dead center of the framebuffer to grab focus. Geometry
+        # comes from gpu_daemon meta -> human config -> the historical
+        # 1024x768 (center 512,384), so behavior is unchanged when meta is
+        # absent. See _focus_click_center.
+        center = self._focus_click_center(host_id, self._runtime_bases())
         tablet_messages = [
             {'action': 'move',
-             'target': {'kind': 'abs', 'x': 512, 'y': 384},
+             'target': {'kind': 'abs', **center},
              'duration_ms': 0},
             {'action': 'click', 'button': 'left'},
         ]
@@ -438,7 +546,7 @@ class HumanApi:
             'stderr': '',
         })
 
-    async def api_input(self, request):
+    async def api_input(self, request: web.Request):
         """Direct GUI input dispatch for live framebuffer viewers.
 
         The frame viewers are host-side: browsers cannot connect to the
@@ -503,7 +611,7 @@ class HumanApi:
             **result,
         })
 
-    async def api_chord(self, request):
+    async def api_chord(self, request: web.Request):
         """Send a single chord (modifier+key) to the host's keyboard
         daemon. Accepts ``POST /plugin/human/api/chord`` with body::
 
@@ -568,9 +676,12 @@ class HumanApi:
         except (FileNotFoundError, KeyError):
             kbd_sock_path = None
 
+        # Focus-grab click at the framebuffer center (gpu_daemon meta ->
+        # human config -> 1024x768 default; see _focus_click_center).
+        center = self._focus_click_center(host_id, self._runtime_bases())
         tablet_messages = [
             {'action': 'move',
-             'target': {'kind': 'abs', 'x': 512, 'y': 384},
+             'target': {'kind': 'abs', **center},
              'duration_ms': 0},
             {'action': 'click', 'button': 'left'},
         ]
@@ -638,7 +749,7 @@ class HumanApi:
 
     # --- Phase C: profile -> input-daemon dispatch --------------------------
 
-    async def api_run_profile(self, request):
+    async def api_run_profile(self, request: web.Request):
         """Materialize a profile and stream OperatorMessages to the host's
         input daemon over its operator UDS. Body or query string carries
         ``host_id`` and ``profile_id``; ``args`` (optional) is a JSON dict
@@ -745,7 +856,8 @@ class HumanApi:
         try:
             target_os = self._resolve_target_os(
                 host_id, os_override, self._runtime_bases())
-        except Exception:  # noqa: BLE001 — best-effort, fall through to ''
+        except Exception as e:  # noqa: BLE001 — best-effort, fall through to ''
+            self.log.debug(repr(e))
             target_os = ''
 
         # Resolve and load the profile.
@@ -766,11 +878,11 @@ class HumanApi:
             messages = materialize_profile(
                 profile, abilities, target_os=target_os,
             )
-        except Exception as e:
-            traceback.print_exc()
+        except Exception:
+            self.log.exception(
+                'api_run_profile failed to materialize profile %r', profile_id)
             return web.json_response(
-                {'status': 'error',
-                 'error': f'materialize failed: {e}'},
+                {'status': 'error', 'error': 'failed to materialize profile'},
                 status=500)
 
         # If the caller passed an `args` envelope, treat it as a per-call
@@ -865,7 +977,7 @@ class HumanApi:
                     }) + '\n\n').encode()
                 )
             except Exception as e:  # noqa: BLE001 — recording is best-effort
-                traceback.print_exc()
+                self.log.exception('api_run_profile failed to start recorder')
                 await resp.write(
                     ('event: log\ndata: ' + json.dumps({
                         'event': 'recording_error',
@@ -1007,7 +1119,7 @@ class HumanApi:
                     except Exception:
                         pass
                 except Exception as e:  # noqa: BLE001
-                    traceback.print_exc()
+                    self.log.exception('api_run_profile recorder.stop failed')
                     try:
                         await resp.write(
                             ('event: log\ndata: ' + json.dumps({
@@ -1426,14 +1538,59 @@ class HumanApi:
         raise KeyError(
             f'host {host_id!r} has no gpu_daemon.frame_socket')
 
-    async def api_recordings_index(self, request):
+    @staticmethod
+    def _focus_click_center(host_id: str, runtime_bases=None) -> dict:
+        """Return the dead-center ``{'x', 'y'}`` of the host's framebuffer.
+
+        The ad-hoc dispatch (``api_run`` / ``api_chord``) sends a focus-grab
+        click at the framebuffer center before typing. The geometry is
+        resolved per host, in order:
+
+          1. ``gpu_daemon.width`` / ``gpu_daemon.height`` from the host's live
+             ``meta.json`` (future-proof: the Range provider may persist the
+             ``--geometry`` it launched the GPU daemon with).
+          2. the ``framebuffer_width`` / ``framebuffer_height`` ``human``
+             config keys.
+          3. the historical ``1024x768`` default.
+
+        Both microVM templates currently spawn the GPU daemon at 1024x768, so
+        when meta carries no geometry and the plugin is unconfigured this
+        returns ``{'x': 512, 'y': 384}`` — the previous hard-coded coordinate,
+        i.e. behavior is unchanged when the metadata is absent.
+
+        :param host_id: target microVM host id (used to find its meta.json).
+        :param runtime_bases: optional explicit runtime bases to scan; defaults
+            to the configured bases via the live-meta iterator.
+        :return: ``{'x': int, 'y': int}`` framebuffer center coordinate.
+        :raises: never — meta read errors fall through to config/default.
+        """
+        width = height = None
+        try:
+            for _run_dir, meta in _iter_live_microvm_meta(
+                    host_id, runtime_bases):
+                gpu = meta.get('gpu_daemon') or {}
+                if gpu.get('width') and gpu.get('height'):
+                    width, height = gpu.get('width'), gpu.get('height')
+                    break
+        except Exception as e:  # noqa: BLE001 — geometry is best-effort
+            log.debug('framebuffer geometry meta read failed: %r', e)
+        if not width:
+            width = _human_conf('framebuffer_width') or 1024
+        if not height:
+            height = _human_conf('framebuffer_height') or 768
+        try:
+            return {'x': int(width) // 2, 'y': int(height) // 2}
+        except (TypeError, ValueError) as e:
+            log.debug('bad framebuffer geometry %r/%r: %r', width, height, e)
+            return {'x': 512, 'y': 384}
+
+    async def api_recordings_index(self, request: web.Request):
         """Return the catalog of MP4 recordings under ``RECORDINGS_BASE``.
 
         Walks ``<base>/<vm_name>/<file>.mp4`` and returns a sorted list
         (newest first) the UI's "Recordings" section can populate its
         dropdown from. Missing/malformed filenames are skipped with a
-        traceback to stderr — we never crash the index because one file
-        is weird.
+        debug log — we never crash the index because one file is weird.
 
         Filename convention: ``<YYYYMMDD-HHMMSS>-<ability>.mp4``. The
         ability segment is whatever was passed as ``profile_id`` to the
@@ -1463,8 +1620,9 @@ class HumanApi:
                         continue
                     try:
                         size_bytes = mp4.stat().st_size
-                    except OSError:
-                        traceback.print_exc()
+                    except OSError as e:
+                        self.log.debug('skipping unstatable recording %s: %r',
+                                       mp4, e)
                         continue
                     iso_ts = None
                     ability = None
@@ -1494,7 +1652,7 @@ class HumanApi:
             key=lambda r: (r['timestamp'] or ''), reverse=True)
         return web.json_response({'recordings': recordings})
 
-    async def api_recording_delete(self, request):
+    async def api_recording_delete(self, request: web.Request):
         """Delete an MP4 at
         ``DELETE /plugin/human/api/recording/<vm_name>/<filename>``.
 
@@ -1551,7 +1709,7 @@ class HumanApi:
         return web.json_response(
             {'status': 'ok', 'deleted': str(target)})
 
-    async def api_recording(self, request):
+    async def api_recording(self, request: web.Request):
         """Serve an MP4 recording at
         ``/plugin/human/api/recording/<vm_name>/<filename>``.
 

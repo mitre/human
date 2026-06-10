@@ -7,8 +7,9 @@ Range plugin** (HID stack, host-side drive over virtio-input).
 ## Recent changes
 
 - Stub `microvm-1` / `microvm-2` hosts removed. The API now returns
-  `{profile: "(no range)", hosts: []}` when no
-  `/tmp/timestone-microvms/*/meta.json` is present, and the UI renders
+  `{profile: "(no range)", hosts: []}` when no microVM runtime dir is
+  present under `/tmp/range-microvms` (the default
+  `microvm_runtime_base`; see `conf/default.yml`), and the UI renders
   a clean empty state instead of fictitious endpoints.
 
 ## Two operating modes
@@ -26,7 +27,12 @@ AppKit), running as the logged-in user.
 * Python 3 + `virtualenv`
 * Google Chrome
 * Python packages from `pyhuman/requirements.txt` (selenium,
-  pyautogui, plus per-OS deps)
+  pyautogui, plus per-OS deps). Note: `lxml` in that list needs
+  the system `libxml2`/`libxslt` libraries on some platforms (e.g.
+  `apt install libxml2-dev libxslt1-dev`).
+* `numpy` is **required** for the framebuffer-recording feature
+  (`pyhuman/recorder.py` imports it at module top, not lazily) and is
+  now pinned in `requirements.txt`.
 
 **Delivers:**
 
@@ -51,12 +57,21 @@ prepared image.**
 
 **Requires (host-side):**
 
-* Caldera with **Range plugin** on `feature/cloud-cdktf-providers @
-  91d3c2a` (or later) — bundles the recovery-hardened binaries
+* Caldera with the **Range plugin** (recent) — bundles the
+  recovery-hardened binaries
 * The Range plugin owns spawning + tearing down microVMs and exposes
   a WebSocket→VNC proxy for live framebuffer viewing
+* `ffmpeg` installed on the **server host** — the recorder shells out
+  to the `ffmpeg` binary to encode the framebuffer to MP4 (Mode-B
+  recording). Install via your OS package manager (e.g.
+  `apt install ffmpeg`).
 * See `RECOVERY_STACK.md` in the Range plugin for the full
   dependency picture
+
+> **Note:** Mode B requires the Range plugin **plus** the microVM
+> infrastructure (Cloud Hypervisor + the host-side input/GPU daemons)
+> that a general user may not have provisioned. If you only need
+> benign-activity generation, use Mode A (standalone) above.
 
 **Delivers:**
 
@@ -107,7 +122,22 @@ WebSocket-to-TCP proxy in Range plugin → browser noVNC. See
 `data/abilities/HID_ABILITY_SCHEMA.md` for the action vocabulary and
 `docs/HID_TEST_HARNESS.md` for the per-ability test infrastructure.
 
-## Requirements (server-side, both modes)
+## Setup (server-side, both modes)
+
+### Step 1 — Activate the plugin (MANDATORY)
+
+Add `- human` to the `plugins:` list in Caldera's `conf/local.yml`.
+**The plugin will not load otherwise.** For example:
+
+```yaml
+plugins:
+  - human
+  # ... other plugins
+```
+
+Then restart the Caldera server so it picks up the plugin.
+
+### Step 2 — Install the server-side Python packages
 
 The Caldera server runs additional Python packages for the Human
 plugin. Install via:
@@ -116,6 +146,18 @@ plugin. Install via:
 cd plugins/human
 pip3 install -r requirements.txt
 ```
+
+### Deploying the pyhuman guest agent (Mode A)
+
+To run the standalone in-guest agent, deploy `pyhuman` to the target
+guest and launch it there. Either:
+
+* Use the **Legacy Builder** UI to build the pyhuman payload, or
+* Run it directly in the guest:
+  `python3 pyhuman/human.py --mode random` (autonomous benign noise)
+  or `python3 pyhuman/human.py --mode control --sock <uds-path>`
+  (operator-driven). Install `pyhuman/requirements.txt` in the guest
+  first.
 
 ## Further Reading
 

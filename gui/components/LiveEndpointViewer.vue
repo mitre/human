@@ -186,10 +186,29 @@ const props = defineProps({
   // 'gui' → noVNC; 'cli' → xterm.js. Anything else falls through
   // to the GUI branch (back-compat: pre-cli hosts surface no value).
   sessionType: { type: String, default: 'gui' },
+  // Modular, backend-authoritative endpoint descriptor (human_svc
+  // resolve_viewer_endpoint). When `transport` is set, it drives the viewer
+  // and `endpointUrl` (already profile-qualified) is used verbatim — the
+  // component no longer string-builds URLs or infers transport from provider.
+  // Empty transport falls back to the legacy sessionType/frameWs heuristic.
+  transport: { type: String, default: '' },        // frame|vnc|console|none
+  endpointUrl: { type: String, default: '' },       // profile-qualified WS path
+  credentialsUrl: { type: String, default: '' },    // vnc one-time password URL
+  interactive: { type: Boolean, default: true },    // false → viewer read-only
 })
 
-const isCli = computed(() => props.sessionType === 'cli')
-const isFrameTransport = computed(() => !isCli.value && !!props.frameWs)
+// Transport is backend-authoritative when provided; otherwise fall back to the
+// legacy heuristic so pre-descriptor hosts still render. Adding a hypervisor is
+// a backend registry row — no change here.
+const resolvedTransport = computed(() => {
+  if (props.transport) return props.transport
+  if (props.sessionType === 'cli') return 'console'
+  if (props.frameWs) return 'frame'
+  return 'vnc'
+})
+const isCli = computed(() => resolvedTransport.value === 'console')
+const isFrameTransport = computed(() => resolvedTransport.value === 'frame')
+const isNone = computed(() => resolvedTransport.value === 'none')
 
 // Notify the parent when the operator collapses/expands the section so
 // the page-level grid can redistribute vertical space (give the freed
@@ -300,6 +319,24 @@ function frameWsUrl(vm) {
   return `${proto}//${window.location.host}${path}`
 }
 
+// Wrap a server-supplied path into a ws(s):// URL for the current host.
+function wsFromPath(path) {
+  if (!path) return ''
+  if (path.startsWith('ws://') || path.startsWith('wss://')) return path
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${proto}//${window.location.host}${path}`
+}
+
+// The live WS URL for the active transport. Prefers the backend descriptor's
+// profile-qualified endpointUrl (so proxmox/vbox resolve correctly); falls
+// back to the legacy per-transport builders for pre-descriptor hosts.
+function liveWsUrl(vm) {
+  if (props.endpointUrl) return wsFromPath(props.endpointUrl)
+  if (isCli.value) return consoleWsUrl(vm)
+  if (isFrameTransport.value) return frameWsUrl(vm)
+  return vncWsUrl(vm)
+}
+
 // Probe the proxy with a HEAD/GET on the ws upgrade URL re-cast to https
 // to detect "host has no live session" (404) cheaply, before opening
 // RFB/xterm. Both proxies return 404 for unknown VMs and 426 ("upgrade
@@ -307,11 +344,13 @@ function frameWsUrl(vm) {
 // path; it means the proxy IS willing to upgrade to WS.
 async function probeStubMode(vm) {
   try {
-    const probeUrl = isCli.value
-      ? `/plugin/range/onprem/console/${encodeURIComponent(vm)}`
-      : (isFrameTransport.value
-          ? (props.frameWs || `/plugin/range/api/frame/${encodeURIComponent(vm)}/ws`)
-          : `/plugin/range/api/vnc/${encodeURIComponent(vm)}/ws`)
+    const probeUrl = props.endpointUrl
+      ? props.endpointUrl
+      : (isCli.value
+          ? `/plugin/range/onprem/console/${encodeURIComponent(vm)}`
+          : (isFrameTransport.value
+              ? (props.frameWs || `/plugin/range/api/frame/${encodeURIComponent(vm)}/ws`)
+              : `/plugin/range/api/vnc/${encodeURIComponent(vm)}/ws`))
     const res = await fetch(probeUrl, { method: 'GET', credentials: 'same-origin' })
     if (res.status === 404) return true
     return false
@@ -324,6 +363,9 @@ async function probeStubMode(vm) {
 
 async function connect() {
   if (!props.vmName) return
+  // The backend resolved no viewable transport for this host (unknown
+  // provider/session) — render the honest empty state, never probe/connect.
+  if (isNone.value) { state.value = 'stub'; return }
   state.value = 'connecting'
   errorMessage.value = ''
   cancelled = false
@@ -358,7 +400,7 @@ async function connectFrame() {
     return
   }
 
-  const url = frameWsUrl(props.vmName)
+  const url = liveWsUrl(props.vmName)
   try {
     frameWs = new WebSocket(url)
     frameWs.binaryType = 'arraybuffer'
@@ -398,10 +440,21 @@ async function connectGui() {
     return
   }
 
-  const url = vncWsUrl(props.vmName)
+  const url = liveWsUrl(props.vmName)
+  // Some host-side VNC transports (proxmox QEMU console) require a one-time
+  // password the backend mints; the descriptor hands us the (profile-qualified)
+  // URL to fetch it. microVM/TigerVNC has no password and supplies no URL.
+  let password = ''
+  if (props.credentialsUrl) {
+    try {
+      const res = await fetch(props.credentialsUrl, { credentials: 'same-origin' })
+      if (res.ok) { const j = await res.json(); password = j.password || '' }
+    } catch (_err) { /* fall through with empty password */ }
+  }
+  if (cancelled) return
   try {
     rfb = new RFB(screen.value, url, {
-      credentials: { password: '' },
+      credentials: { password },
     })
   } catch (err) {
     console.error('[live-endpoint] RFB constructor threw', err)
@@ -410,7 +463,10 @@ async function connectGui() {
     return
   }
 
-  rfb.viewOnly = true        // input flows from the Human plugin only
+  // Read-only unless the descriptor says this transport is interactive
+  // host-side (proxmox QEMU input). microVM frames take input via the input
+  // daemon, not RFB, so they pass interactive=true but never reach this path.
+  rfb.viewOnly = !props.interactive
   rfb.scaleViewport = true   // fit canvas to container, preserve aspect
   rfb.resizeSession = false
   rfb.background = '#000'
@@ -503,7 +559,7 @@ async function connectCli() {
   }
 
   // Open the WS and wire input/output.
-  const url = consoleWsUrl(props.vmName)
+  const url = liveWsUrl(props.vmName)
   try {
     termWs = new WebSocket(url)
     termWs.binaryType = 'arraybuffer'
@@ -904,7 +960,8 @@ function teardown() {
 // `cancelled = true`, so we don't reset it explicitly — connect()
 // does that on entry.
 watch(
-  () => [props.vmName, props.sessionType, props.frameWs],
+  () => [props.vmName, props.sessionType, props.frameWs,
+         props.transport, props.endpointUrl],
   ([nextVm], [prevVm] = [null]) => {
     if (prevVm) teardown()
     if (nextVm) connect()

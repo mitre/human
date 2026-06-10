@@ -3,4 +3,5 @@ selenium>=4.14.0
 webdriver-manager==3.5.2
 pyautogui==0.9.53
 beautifulsoup4
+numpy>=1.21  # required by pyhuman/recorder.py (framebuffer MP4 recording); imported unconditionally at module top
 

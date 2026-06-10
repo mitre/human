@@ -1,0 +1,45 @@
+# Human plugin default config.
+#
+# These are the historical hard-coded defaults, lifted out of the
+# Python modules so an operator can override them without editing code:
+# copy this file to conf/local.yml and edit there, or set the matching
+# environment variable.
+#
+# Resolution order for every key below is ENV -> this conf (local.yml
+# overrides default.yml) -> the in-code default. The env var is checked
+# first so existing deploys that export RANGE_MICROVM_RUNTIME_BASE etc.
+# keep working unchanged; the conf layer is purely additive.
+
+# ---------------------------------------------------------------------------
+# Runtime-base / path tunables (config-with-env-fallback)
+# ---------------------------------------------------------------------------
+
+# Canonical Cloud-Hypervisor microVM runtime base. Mirrors the Range
+# provider's RANGE_MICROVM_RUNTIME_BASE; the provider's A3 agent writes
+# <base>/<host_id>-<suffix>/meta.json once the input/gpu daemons are up.
+# Env override: RANGE_MICROVM_RUNTIME_BASE.
+microvm_runtime_base: /tmp/range-microvms
+
+# Where the SSE run-profile handler writes recorded MP4s (one subdir per
+# VM). Empty here keeps the in-code default, which is the plugin's own
+# data/recordings/ directory. Env override: TIMESTONE_RECORDINGS_BASE.
+recordings_base: ''
+
+# Where the SSH local-forward sockets for cloud-hosted (ssh-tunnel)
+# carriers live on the operator's machine. One subdir per VM.
+# Env override: TIMESTONE_SSH_TUNNEL_BASE.
+ssh_tunnel_base: /tmp/timestone-tunnels
+
+# ---------------------------------------------------------------------------
+# HID focus-click geometry
+# ---------------------------------------------------------------------------
+# The ad-hoc api_run / api_chord dispatch sends a focus-grab click at the
+# dead center of the guest framebuffer before typing. The center is
+# derived from the framebuffer geometry, resolved per host as:
+#   gpu_daemon.width/height in the host's meta.json (if present)
+#   -> these config keys -> the historical 1024x768 default.
+# Both Server 2022 and Win10 microVM templates spawn the GPU daemon at
+# 1024x768 (onprem_microvm_provider --geometry 1024x768), so leaving
+# these unchanged preserves the current click coordinate (512, 384).
+framebuffer_width: 1024
+framebuffer_height: 768

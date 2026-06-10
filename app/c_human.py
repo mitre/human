@@ -2,6 +2,13 @@ from app.utility.base_object import BaseObject
 
 
 class Human(BaseObject):
+    """Legacy/deprecated pyhuman object (see pyhuman/DEPRECATED.md).
+
+    Deliberate deviation from the core FirstClassObjectInterface + ma.Schema
+    contract: this is a BaseObject-without-Schema cradle-builder model kept
+    only for the opt-in legacy pyhuman runtime. Not promoted to the object
+    model on purpose; do not refactor.
+    """
 
     @property
     def display(self):

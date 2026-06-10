@@ -131,9 +131,10 @@
             </p>
             <p class="is-size-7 mb-1">
               <strong>Endpoint:</strong>
-              <code v-if="selectedHost.session_type === 'gui' && selectedHost.frame_ws">{{ selectedHost.frame_ws }}</code>
-              <code v-else-if="selectedHost.session_type === 'gui' && selectedHost.vnc_ws">{{ selectedHost.vnc_ws }}</code>
-              <code v-else-if="selectedHost.session_type === 'cli' && selectedHost.console_ws">{{ selectedHost.console_ws }}</code>
+              <!-- Render from the backend transport descriptor (provider-
+                   agnostic, profile-qualified) instead of a per-provider
+                   frame_ws/vnc_ws/console_ws triple. -->
+              <code v-if="selectedHost.endpoint_url">{{ selectedHost.transport }} · {{ selectedHost.endpoint_url }}</code>
               <span v-else class="has-text-grey">
                 no live endpoint registered (stub / unknown session)
               </span>
@@ -156,6 +157,10 @@
           :vm-name="liveEndpointVmName"
           :session-type="liveEndpointSessionType"
           :frame-ws="selectedHost?.frame_ws || ''"
+          :transport="selectedHost?.transport || ''"
+          :endpoint-url="selectedHost?.endpoint_url || ''"
+          :credentials-url="selectedHost?.credentials_url || ''"
+          :interactive="selectedHost?.interactive !== false"
           @update:collapsed="viewerCollapsed = $event"
         >
           <template #header-extra>

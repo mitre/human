@@ -1,0 +1,272 @@
+[
+  {
+    "action": "dwell",
+    "ms": 1121
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 1669
+  },
+  {
+    "action": "dwell",
+    "ms": 4284
+  },
+  {
+    "action": "chord",
+    "hold_ms": 80,
+    "keys": [
+      "LeftCtrl",
+      "LeftAlt",
+      "Delete"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 3914
+  },
+  {
+    "action": "type",
+    "per_char_ms": 110,
+    "text": "Producer1!"
+  },
+  {
+    "action": "dwell",
+    "ms": 389
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 18000
+  },
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftMeta",
+      "r"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 400
+  },
+  {
+    "action": "type",
+    "per_char_ms": 90,
+    "text": "msedge"
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 2500
+  },
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftControl",
+      "l"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 150
+  },
+  {
+    "action": "type",
+    "per_char_ms": 110,
+    "text": "http://nato-int.com/"
+  },
+  {
+    "action": "dwell",
+    "ms": 250
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 1500
+  },
+  {
+    "action": "dwell",
+    "ms": 10066
+  },
+  {
+    "action": "move",
+    "duration_ms": 350,
+    "easing": "ease-out",
+    "target": {
+      "kind": "named",
+      "named": "random_link"
+    }
+  },
+  {
+    "action": "dwell",
+    "ms": 176
+  },
+  {
+    "action": "click",
+    "button": "left"
+  },
+  {
+    "action": "dwell",
+    "ms": 2749
+  },
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftMeta",
+      "r"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 400
+  },
+  {
+    "action": "type",
+    "per_char_ms": 90,
+    "text": "C:\\Users\\egle\\Downloads\\NFVersion_5e.exe"
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 6000
+  },
+  {
+    "action": "dwell",
+    "ms": 3070
+  },
+  {
+    "action": "chord",
+    "hold_ms": 80,
+    "keys": [
+      "LeftCtrl",
+      "LeftAlt",
+      "Delete"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 4538
+  },
+  {
+    "action": "press",
+    "key": "Down"
+  },
+  {
+    "action": "dwell",
+    "ms": 473
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 12000
+  },
+  {
+    "action": "dwell",
+    "ms": 1010
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "dwell",
+    "ms": 1704
+  },
+  {
+    "action": "dwell",
+    "ms": 3692
+  },
+  {
+    "action": "chord",
+    "hold_ms": 80,
+    "keys": [
+      "LeftCtrl",
+      "LeftAlt",
+      "Delete"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 3938
+  },
+  {
+    "action": "type",
+    "per_char_ms": 110,
+    "text": "Producer1!"
+  },
+  {
+    "action": "dwell",
+    "ms": 320
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 18000
+  },
+  {
+    "action": "chord",
+    "hold_ms": 50,
+    "keys": [
+      "LeftMeta",
+      "r"
+    ]
+  },
+  {
+    "action": "dwell",
+    "ms": 400
+  },
+  {
+    "action": "type",
+    "per_char_ms": 90,
+    "text": "msedge"
+  },
+  {
+    "action": "dwell",
+    "ms": 200
+  },
+  {
+    "action": "press",
+    "key": "Enter"
+  },
+  {
+    "action": "wait_for",
+    "ms": 2500
+  },
+  {
+    "action": "dwell",
+    "ms": 180000
+  }
+]

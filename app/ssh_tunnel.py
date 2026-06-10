@@ -57,12 +57,45 @@ from typing import Dict, Optional
 log = logging.getLogger(__name__)
 
 
+def _ssh_tunnel_conf(prop: str):
+    """Read ``prop`` from the human plugin conf, or ``None`` if unavailable.
+
+    ``human_api`` imports this module at top, so we can't import back from it
+    without a cycle; instead read ``conf/local.yml`` then ``conf/default.yml``
+    straight off disk. Used as the middle layer of the ENV -> conf -> default
+    chain for ``DEFAULT_LOCAL_TUNNEL_BASE`` below. Mirrors the same disk-read
+    fallback ``human_api._human_conf`` uses.
+
+    :param prop: config key under the ``human`` scope.
+    :return: the configured value, or ``None`` when absent/unreadable.
+    :raises: never — any parse/IO error degrades to ``None``.
+    """
+    conf_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'conf')
+    for fname in ('local.yml', 'default.yml'):
+        try:
+            import yaml
+            with open(os.path.join(conf_dir, fname), encoding='utf-8') as f:
+                data = yaml.safe_load(f) or {}
+            if isinstance(data, dict) and data.get(prop) is not None:
+                return data[prop]
+        except FileNotFoundError:
+            continue
+        except Exception:  # noqa: BLE001 — malformed conf must not break import
+            continue
+    return None
+
+
 # Where local forwarding sockets live on the operator's machine. Same
 # /tmp prefix as MICROVM_RUNTIME_BASE so cleanup tooling already knows
 # where to look. One subdir per VM keeps file-name collisions out of
-# the picture even for parallel deploys.
-DEFAULT_LOCAL_TUNNEL_BASE = os.environ.get(
-    'TIMESTONE_SSH_TUNNEL_BASE', '/tmp/timestone-tunnels'
+# the picture even for parallel deploys. Resolution: TIMESTONE_SSH_TUNNEL_BASE
+# env -> human conf (ssh_tunnel_base) -> the historical default. Env wins so
+# existing deploys are unchanged.
+DEFAULT_LOCAL_TUNNEL_BASE = (
+    os.environ.get('TIMESTONE_SSH_TUNNEL_BASE')
+    or _ssh_tunnel_conf('ssh_tunnel_base')
+    or '/tmp/timestone-tunnels'
 )
 
 

@@ -2,6 +2,13 @@ from app.utility.base_object import BaseObject
 
 
 class Workflow(BaseObject):
+    """Legacy/deprecated pyhuman object (see pyhuman/DEPRECATED.md).
+
+    Deliberate deviation from the core FirstClassObjectInterface + ma.Schema
+    contract: a BaseObject-without-Schema model for the opt-in legacy pyhuman
+    cradle-builder runtime. Not promoted to the object model on purpose; do
+    not refactor.
+    """
 
     @property
     def display(self):

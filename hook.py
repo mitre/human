@@ -19,6 +19,16 @@ access = BaseWorld.Access.APP
 
 
 async def enable(services):
+    # Register the plugin's default config under the 'human' scope so the
+    # runtime-base / geometry tunables resolve via BaseWorld.get_config
+    # (local.yml overrides default.yml). The modules themselves layer this
+    # behind their existing env-var override (ENV -> conf -> in-code
+    # default) so current deploys are unaffected; this call just makes the
+    # conf layer available. strip_yml returns a list of YAML docs — take
+    # the first, matching the detections/timestone plugins' idiom.
+    BaseWorld.apply_config(
+        'human', BaseWorld.strip_yml('plugins/human/conf/default.yml')[0])
+
     app = services.get('app_svc').application
     await services.get('data_svc').apply('humans')
     await services.get('data_svc').apply('workflows')
